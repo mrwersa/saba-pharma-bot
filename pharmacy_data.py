@@ -201,9 +201,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 response += f"{result}\n"  # Print error message if scraping failed for a specific pharmacy
-        
-        # Ensure numbers are not formatted as currency
-        response = response.replace('£', '').replace('$', '')  # Remove currency symbols if present
+                
         await update.message.reply_text(response)
     else:
         await update.message.reply_text("No pharmacies found for the given postcode.")
