@@ -73,8 +73,8 @@ def fetch_pharmacies_selenium(postcode):
         for result in search_results:
             pharmacy_id = result.get_attribute('id')
             pharmacy_ids.append(pharmacy_id)
-            # Limit to maximum 10 results
-            if len(pharmacy_ids) > 5:
+            # Limit to maximum 5 results
+            if len(pharmacy_ids) >= 5:
                 break
         if pharmacy_ids:
             print(f"Found {len(pharmacy_ids)} results.")
