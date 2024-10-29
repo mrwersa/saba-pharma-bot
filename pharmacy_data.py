@@ -27,9 +27,11 @@ def get_custom_chrome_options():
     chrome_options = webdriver.ChromeOptions()
     
     # Run in headless mode
-    chrome_options.add_argument("--headless")  # Enable headless mode
-    chrome_options.add_argument("--no-sandbox")  # Disable sandboxing for headless
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")  # Important for Heroku
     chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+    chrome_options.add_argument("--disable-gpu")  # Disable GPU acceleration
+
 
     # Set logging level
     chrome_options.add_argument("--log-level=ALL")
