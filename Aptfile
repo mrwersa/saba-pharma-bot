@@ -1,5 +1,7 @@
 chromium-browser
+chromium-chromedriver
+libnss3
+libgconf-2-4
+libxi6
 libxss1
-libappindicator3-1
-libatk-bridge2.0-0
-libgtk-3-0
+libxrandr2
