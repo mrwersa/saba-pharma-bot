@@ -1,5 +1,13 @@
+# Aptfile
+
 # Install Firefox
 firefox
 
 # Install Geckodriver
-geckodriver
+curl -sSL https://github.com/mozilla/geckodriver/releases/latest/download/geckodriver-v0.32.0-linux-aarch64.tar.gz -o geckodriver.tar.gz
+tar -xvzf geckodriver.tar.gz
+chmod +x geckodriver
+mv geckodriver /usr/local/bin/
+
+# Clean up
+rm geckodriver.tar.gz
