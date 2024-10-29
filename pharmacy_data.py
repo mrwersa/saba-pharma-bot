@@ -10,7 +10,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
 import nest_asyncio
-import os
+import os  # Import os to access environment variables
 
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
@@ -213,8 +213,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No pharmacies found for the given postcode.")
 
 async def telegram_bot_main():
-    token = os.getenv("TELEGRAM_BOT_TOKEN")  # Get the bot token from an environment variable
-    application = ApplicationBuilder().token(token).build()  
+    token = os.getenv("TELEGRAM_BOT_TOKEN")  # Get token from environment variable
+    application = ApplicationBuilder().token(token).build()  # Use the environment variable for the token
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Handle all text messages
     await application.run_polling()
