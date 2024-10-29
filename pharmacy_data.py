@@ -1,6 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys  # Import Keys to simulate key presses
@@ -50,7 +51,7 @@ def fetch_pharmacies_selenium(postcode):
     
     # Initialize Selenium WebDriver with custom Firefox options
     firefox_options = get_custom_firefox_options()
-    driver = webdriver.Firefox(service=Service('/app/.apt/usr/bin/geckodriver'), options=firefox_options)
+    driver = webdriver.Firefox(service=FirefoxService('/usr/local/bin/geckodriver'), options=firefox_options)
     
     try:
         # Step 1: Navigate to PharmData search page
@@ -100,7 +101,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
     
     # Initialize Selenium WebDriver with custom Firefox options
     firefox_options = get_custom_firefox_options()
-    driver = webdriver.Firefox(service=Service('/app/.apt/usr/bin/geckodriver'), options=firefox_options)
+    driver = webdriver.Firefox(service=FirefoxService('/usr/local/bin/geckodriver'), options=firefox_options)
     
     try:
         # Step 1: Navigate to the pharmacy detail page
