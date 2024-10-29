@@ -47,7 +47,7 @@ def get_custom_chrome_options():
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
     # Set the path for the Chromium binary
-    chrome_options.binary_location = '/usr/bin/chromium-browser'
+    chrome_options.binary_location = '/app/.apt/usr/bin/chromium-browser'
     
     return chrome_options
 
@@ -64,7 +64,7 @@ def fetch_pharmacies_selenium(postcode):
     
     # Initialize Selenium WebDriver with custom Chrome options
     chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service('/usr/bin/chromedriver'), options=chrome_options)
+    driver = webdriver.Chrome(service=Service('/app/.apt/usr/bin/chromedriver'), options=chrome_options)
     
     try:
         # Step 1: Navigate to PharmData search page
@@ -114,7 +114,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
     
     # Initialize Selenium WebDriver with custom Chrome options
     chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service('/usr/bin/chromedriver'), options=chrome_options)
+    driver = webdriver.Chrome(service=Service('/app/.apt/usr/bin/chromedriver'), options=chrome_options)
     
     try:
         # Step 1: Navigate to the pharmacy detail page
