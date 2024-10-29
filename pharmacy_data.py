@@ -1,7 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys  # Import Keys to simulate key presses
@@ -10,7 +10,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
 import nest_asyncio
-
+import os  # Added import for environment variables
 
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
@@ -23,14 +23,23 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A372 Safari/604.1"
 ]
 
-# Function to set up custom Firefox options for headless mode
-def get_custom_firefox_options():
-    firefox_options = FirefoxOptions()
-    firefox_options.add_argument("--headless")
+# Function to set up custom Chrome options for headless mode
+def get_custom_chrome_options():
+    chrome_options = ChromeOptions()
+    
+    # Run in headless mode
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    
+    # Randomize User-Agent
     user_agent = random.choice(USER_AGENTS)
-    firefox_options.set_preference("general.useragent.override", user_agent)
-    firefox_options.set_preference("dom.webdriver.enabled", False)
-    return firefox_options
+    chrome_options.add_argument(f"user-agent={user_agent}")
+
+    # Set the path for Chrome binary and driver from environment variables
+    chrome_options.binary_location = os.environ.get('GOOGLE_CHROME_BIN')
+    
+    return chrome_options
 
 # Function to clear localStorage, sessionStorage, IndexedDB, and cache
 def clear_browser_storage(driver):
@@ -43,9 +52,9 @@ def clear_browser_storage(driver):
 def fetch_pharmacies_selenium(postcode):
     print(f"Searching PharmData for postcode: {postcode}")
     
-    # Initialize Selenium WebDriver with custom Firefox options
-    firefox_options = get_custom_firefox_options()
-    driver = webdriver.Firefox(service=FirefoxService('/usr/local/bin/geckodriver'), options=firefox_options)
+    # Initialize Selenium WebDriver with custom Chrome options
+    chrome_options = get_custom_chrome_options()
+    driver = webdriver.Chrome(service=ChromeService(os.environ.get('CHROMEDRIVER_PATH')), options=chrome_options)
     
     try:
         # Step 1: Navigate to PharmData search page
@@ -93,9 +102,9 @@ def fetch_pharmacies_selenium(postcode):
 def scrape_items_and_forms_selenium(pharmacy_id):
     url = f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
     
-    # Initialize Selenium WebDriver with custom Firefox options
-    firefox_options = get_custom_firefox_options()
-    driver = webdriver.Firefox(service=FirefoxService('/usr/local/bin/geckodriver'), options=firefox_options)
+    # Initialize Selenium WebDriver with custom Chrome options
+    chrome_options = get_custom_chrome_options()
+    driver = webdriver.Chrome(service=ChromeService(os.environ.get('CHROMEDRIVER_PATH')), options=chrome_options)
     
     try:
         # Step 1: Navigate to the pharmacy detail page
@@ -196,10 +205,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No pharmacies found for the given postcode.")
 
 async def telegram_bot_main():
-    application = ApplicationBuilder().token("7544632897:AAGpwNWkgH-Q8T2evwYbolYznU6E60MPRNw").build()  # Replace with your bot token
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")  # Retrieve token from environment variable
+    application = ApplicationBuilder().token(bot_token).build()  
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Handle all text messages
     await application.run_polling()
+
 
 if __name__ == "__main__":
     asyncio.run(telegram_bot_main())
