@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
 import nest_asyncio
+import os
 
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
@@ -19,7 +20,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A372 Safari/604.1"
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14_0 Mobile/15A372 Safari/604.1"
 ]
 
 # Function to set up custom Chrome options for headless mode
@@ -212,7 +213,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No pharmacies found for the given postcode.")
 
 async def telegram_bot_main():
-    application = ApplicationBuilder().token("7544632897:AAGpwNWkgH-Q8T2evwYbolYznU6E60MPRNw").build()  # Replace with your bot token
+    token = os.getenv("TELEGRAM_BOT_TOKEN")  # Get the bot token from an environment variable
+    application = ApplicationBuilder().token(token).build()  
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Handle all text messages
     await application.run_polling()
