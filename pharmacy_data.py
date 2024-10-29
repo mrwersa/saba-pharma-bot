@@ -1,16 +1,29 @@
 from selenium import webdriver
+
 from selenium.webdriver.common.by import By
+
 from selenium.webdriver.chrome.service import Service as ChromeService
+
 from selenium.webdriver.chrome.options import Options as ChromeOptions
+
 from selenium.webdriver.support.ui import WebDriverWait
+
 from selenium.webdriver.support import expected_conditions as EC
+
 from selenium.webdriver.common.keys import Keys  # Import Keys to simulate key presses
+
 import random
+
 from telegram import Update
+
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+
 import asyncio
+
 import nest_asyncio
+
 import os  # Added import for environment variables
+
 import re
 
 
