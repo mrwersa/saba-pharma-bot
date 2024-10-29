@@ -165,7 +165,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('سلام عزیزم! من ربات اطلاعات داروخانه هستم. لطفاً یک کد پستی بریتانیا وارد کن')
     
-# Function to handle Telegram commands
+# This function will be called whenever a user sends a message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     postcode = update.message.text.strip()  # Get the text message sent by the user
     
