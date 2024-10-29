@@ -4,13 +4,12 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys  # Import Keys to simulate key presses
-from webdriver_manager.chrome import ChromeDriverManager
 import random
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
 import nest_asyncio
-import os  # Import os to access environment variables
+import os
 
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
@@ -20,7 +19,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14_0 Mobile/15A372 Safari/604.1"
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A372 Safari/604.1"
 ]
 
 # Function to set up custom Chrome options for headless mode
@@ -46,6 +45,9 @@ def get_custom_chrome_options():
     # Disable automation flag in Chrome
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
+
+    # Set the path for the Chromium binary
+    chrome_options.binary_location = '/usr/bin/chromium-browser'
     
     return chrome_options
 
@@ -62,7 +64,7 @@ def fetch_pharmacies_selenium(postcode):
     
     # Initialize Selenium WebDriver with custom Chrome options
     chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    driver = webdriver.Chrome(service=Service('/usr/bin/chromedriver'), options=chrome_options)
     
     try:
         # Step 1: Navigate to PharmData search page
@@ -112,7 +114,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
     
     # Initialize Selenium WebDriver with custom Chrome options
     chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    driver = webdriver.Chrome(service=Service('/usr/bin/chromedriver'), options=chrome_options)
     
     try:
         # Step 1: Navigate to the pharmacy detail page
@@ -142,7 +144,6 @@ def scrape_items_and_forms_selenium(pharmacy_id):
             EC.presence_of_element_located((By.CSS_SELECTOR, '.panel-title-custom'))
         )
         pharmacy_name = pharmacy_name_element.text.split('(')[0].strip()  # Extract pharmacy name
-
 
         # Return the scraped data
         return {
@@ -214,7 +215,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def telegram_bot_main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")  # Get token from environment variable
-    application = ApplicationBuilder().token(token).build()  # Use the environment variable for the token
+    application = ApplicationBuilder().token(token).build()  # Replace with your bot token
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Handle all text messages
     await application.run_polling()
