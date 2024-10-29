@@ -1,9 +1,5 @@
-chromium-browser
-chromium-chromedriver
-libnss3
-libxi6
-libxrender1
-libxtst6
-fonts-liberation
-libappindicator3-1
-libxss1
+# Install Firefox
+firefox
+
+# Install Geckodriver
+geckodriver
