@@ -72,7 +72,7 @@ def fetch_pharmacies_selenium(postcode):
     
     # Initialize Selenium WebDriver with custom Chrome options
     chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service('/app/.apt/usr/bin/chromedriver'), options=chrome_options)
+    driver = webdriver.Chrome(service=Service(), options=chrome_options)
     
     try:
         # Step 1: Navigate to PharmData search page
@@ -122,7 +122,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
     
     # Initialize Selenium WebDriver with custom Chrome options
     chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service('/app/.apt/usr/bin/chromedriver'), options=chrome_options)
+    driver = webdriver.Chrome(service=Service(), options=chrome_options)
     
     try:
         # Step 1: Navigate to the pharmacy detail page
