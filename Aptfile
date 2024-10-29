@@ -1,2 +1,10 @@
 chromium-browser
 chromium-chromedriver
+libnss3
+libgconf-2-4
+libxi6
+libxrender1
+libxtst6
+fonts-liberation
+libappindicator3-1
+libxss1
