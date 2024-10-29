@@ -1,6 +1,6 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys  # Import Keys to simulate key presses
@@ -9,7 +9,6 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
 import nest_asyncio
-import os
 
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
@@ -22,42 +21,21 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A372 Safari/604.1"
 ]
 
-# Function to set up custom Chrome options for headless mode
-def get_custom_chrome_options():
-    chrome_options = webdriver.ChromeOptions()
+# Function to set up custom Firefox options for headless mode
+def get_custom_firefox_options():
+    firefox_options = webdriver.FirefoxOptions()
     
     # Run in headless mode
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")  # Important for Heroku
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
-    chrome_options.add_argument("--disable-gpu")  # Disable GPU acceleration
-
-
-    # Set logging level
-    chrome_options.add_argument("--log-level=ALL")
-    chrome_options.add_argument("--verbose")
-
+    firefox_options.add_argument("--headless")
+    
     # Randomize User-Agent
     user_agent = random.choice(USER_AGENTS)
-    chrome_options.add_argument(f"user-agent={user_agent}")
+    firefox_options.set_preference("general.useragent.override", user_agent)
     
-    # Disable WebGL (a common source of fingerprinting)
-    chrome_options.add_argument("--disable-webgl")
+    # Disable automation flag in Firefox
+    firefox_options.set_preference("dom.webdriver.enabled", False)
     
-    # Disable extensions
-    chrome_options.add_argument("--disable-extensions")
-    
-    # Randomize window size
-    chrome_options.add_argument(f"--window-size={random.randint(1200, 1600)},{random.randint(800, 1000)}")
-    
-    # Disable automation flag in Chrome
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
-
-    # Set the path for the Chromium binary
-    chrome_options.binary_location = '/app/.apt/usr/bin/chromium-browser'
-    
-    return chrome_options
+    return firefox_options
 
 # Function to clear localStorage, sessionStorage, IndexedDB, and cache
 def clear_browser_storage(driver):
@@ -70,9 +48,9 @@ def clear_browser_storage(driver):
 def fetch_pharmacies_selenium(postcode):
     print(f"Searching PharmData for postcode: {postcode}")
     
-    # Initialize Selenium WebDriver with custom Chrome options
-    chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service(), options=chrome_options)
+    # Initialize Selenium WebDriver with custom Firefox options
+    firefox_options = get_custom_firefox_options()
+    driver = webdriver.Firefox(service=Service('/app/.apt/usr/bin/geckodriver'), options=firefox_options)
     
     try:
         # Step 1: Navigate to PharmData search page
@@ -120,9 +98,9 @@ def fetch_pharmacies_selenium(postcode):
 def scrape_items_and_forms_selenium(pharmacy_id):
     url = f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
     
-    # Initialize Selenium WebDriver with custom Chrome options
-    chrome_options = get_custom_chrome_options()
-    driver = webdriver.Chrome(service=Service(), options=chrome_options)
+    # Initialize Selenium WebDriver with custom Firefox options
+    firefox_options = get_custom_firefox_options()
+    driver = webdriver.Firefox(service=Service('/app/.apt/usr/bin/geckodriver'), options=firefox_options)
     
     try:
         # Step 1: Navigate to the pharmacy detail page
@@ -152,6 +130,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
             EC.presence_of_element_located((By.CSS_SELECTOR, '.panel-title-custom'))
         )
         pharmacy_name = pharmacy_name_element.text.split('(')[0].strip()  # Extract pharmacy name
+
 
         # Return the scraped data
         return {
@@ -222,8 +201,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No pharmacies found for the given postcode.")
 
 async def telegram_bot_main():
-    token = os.getenv("TELEGRAM_BOT_TOKEN")  # Get token from environment variable
-    application = ApplicationBuilder().token(token).build()  # Replace with your bot token
+    application = ApplicationBuilder().token("7544632897:AAGpwNWkgH-Q8T2evwYbolYznU6E60MPRNw").build()  # Replace with your bot token
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Handle all text messages
     await application.run_polling()
