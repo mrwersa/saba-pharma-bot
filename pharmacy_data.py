@@ -11,6 +11,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Messa
 import asyncio
 import nest_asyncio
 
+
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
 
@@ -24,18 +25,11 @@ USER_AGENTS = [
 
 # Function to set up custom Firefox options for headless mode
 def get_custom_firefox_options():
-    firefox_options = webdriver.FirefoxOptions()
-    
-    # Run in headless mode
+    firefox_options = FirefoxOptions()
     firefox_options.add_argument("--headless")
-    
-    # Randomize User-Agent
     user_agent = random.choice(USER_AGENTS)
     firefox_options.set_preference("general.useragent.override", user_agent)
-    
-    # Disable automation flag in Firefox
     firefox_options.set_preference("dom.webdriver.enabled", False)
-    
     return firefox_options
 
 # Function to clear localStorage, sessionStorage, IndexedDB, and cache
