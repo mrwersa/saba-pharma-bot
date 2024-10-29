@@ -1,7 +1,4 @@
 chromium-browser
 chromium-chromedriver
-libnss3
-libxss1
-libgtk-3-0
-libdbus-glib-1-2
+libgconf-2-4
 libasound2
