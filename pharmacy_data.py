@@ -135,6 +135,10 @@ def scrape_items_and_forms_selenium(pharmacy_id):
         )
         pharmacy_name = pharmacy_name_element.text.split('(')[0].strip()  # Extract pharmacy name
 
+        # Scrape the pharmacy name and address with the parent class 'list-group'
+        pharmacy_info = driver.find_element(By.XPATH, "//div[contains(@class, 'list-group')]/strong").text  # Get pharmacy name
+        address = driver.find_element(By.XPATH, "//div[contains(@class, 'list-group')]/strong/following-sibling::br[3]").text  # Get the address
+        postcode = address.split()[-1]  # Get the last part of the address which is the postcode
 
         # Return the scraped data
         return {
@@ -146,7 +150,8 @@ def scrape_items_and_forms_selenium(pharmacy_id):
             'EPS Takeup': {
                 'Percentage': eps_takeup_percentage
             },
-            'Pharmacy Name': pharmacy_name
+            'Pharmacy Name': pharmacy_name,
+            'Pharmacy Postcode': postcode
         }
     
     except Exception as e:
@@ -157,10 +162,6 @@ def scrape_items_and_forms_selenium(pharmacy_id):
         driver.quit()
 
 # Function to handle Telegram commands
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('سلام عزیزم! من ربات اطلاعات داروخانه هستم. لطفاً یک کد پستی بریتانیا وارد کن')
-
-# This function will be called whenever a user sends a message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     postcode = update.message.text.strip()  # Get the text message sent by the user
     
@@ -185,21 +186,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 results.append(f"Failed to scrape data for pharmacy ID: {pharmacy_id}")
         
         # Output all results after fetching
-        response = "\n--- Results ---\n"
+        response = "\n--- Results (All values are averages over 3 months) ---\n"  # Updated line
         for result in results:
             if isinstance(result, dict):
                 response += (
                     f"\nPharmacy Name: {result['Pharmacy Name']}\n"
-                    f"Items Dispensed: {result['Items']}\n"
-                    f"Forms Data: {result['Forms']}\n"
-                    f"CPCS: {result['CPCS']}\n"
-                    f"Pharmacy First: {result['Pharmacy First']}\n"
-                    f"NMS: {result['NMS']}\n"
-                    f"EPS Takeup: {result['EPS Takeup']['Percentage']}\n"
+                    f"nPharmacy Postcode: {result['Pharmacy Postcode']}\n"  # Updated line
+                    f"Items Dispensed: {result['Items']}\n"  # Updated line
+                    f"Average Monthly Prescriptions: {result['Forms']}\n"  # Updated line
+                    f"CPCS: {result['CPCS']}\n"  # Updated line
+                    f"Pharmacy First: {result['Pharmacy First']}\n"  # Updated line
+                    f"NMS: {result['NMS']}\n"  # Updated line
+                    f"EPS Takeup: {result['EPS Takeup']['Percentage']}\n"  # Updated line
                 )
             else:
                 response += f"{result}\n"  # Print error message if scraping failed for a specific pharmacy
         
+        # Ensure numbers are not formatted as currency
+        response = response.replace('£', '').replace('$', '')  # Remove currency symbols if present
         await update.message.reply_text(response)
     else:
         await update.message.reply_text("No pharmacies found for the given postcode.")
