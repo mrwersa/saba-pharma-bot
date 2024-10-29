@@ -114,7 +114,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
         )
         pharmacy_name = pharmacy_name_element.text.split('(')[0].strip()  # Extract pharmacy name
         # Get the address; consider getting the whole block of text and then parsing if needed
-        address_elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'list-group')]/strong/following-sibling::text()")
+        address_elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'col-md-3')]/strong/following-sibling::text()")
         address = ''.join([elem.strip() for elem in address_elements if elem.strip()])  # Combine and clean
         # Scrape the pharmacy name and address with the parent class 'list-group'
         postcode_match = re.search(r'\b[A-Z]{1,2}\d[A-Z]?\s*\d[A-Z]{2}\b', address)
@@ -167,14 +167,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 results.append(f"Failed to scrape data for pharmacy ID: {pharmacy_id}")
         
         # Output all results after fetching
-        response = "\n--- Results (All values are averages over 3 months) ---\n"  # Updated line
+        response = "\n--- Results (Averages over 3 months) ---\n"  # Updated line
         for result in results:
             if isinstance(result, dict):
                 response += (
-                    f"\nPharmacy Name: {result['Pharmacy Name']}\n"
-                    f"Pharmacy Postcode: {result['Pharmacy Postcode']}\n"  # Updated line
+                    f"\nPharmacy: {result['Pharmacy Name']} ({result['Pharmacy Postcode']})\n"
                     f"Items Dispensed: {result['Items']}\n"  # Updated line
-                    f"Average Monthly Prescriptions: {result['Forms']}\n"  # Updated line
+                    f"Prescriptions: {result['Forms']}\n"  # Updated line
                     f"CPCS: {result['CPCS']}\n"  # Updated line
                     f"Pharmacy First: {result['Pharmacy First']}\n"  # Updated line
                     f"NMS: {result['NMS']}\n"  # Updated line
