@@ -113,11 +113,12 @@ def scrape_items_and_forms_selenium(pharmacy_id):
             EC.presence_of_element_located((By.CSS_SELECTOR, '.panel-title-custom'))
         )
         pharmacy_name = pharmacy_name_element.text.split('(')[0].strip()  # Extract pharmacy name
-        # Get the address; consider getting the whole block of text and then parsing if needed
-        address_elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'col-md-3')]/strong/following-sibling::text()")
-        address = ''.join([elem.strip() for elem in address_elements if elem.strip()])  # Combine and clean
-        # Scrape the pharmacy name and address with the parent class 'list-group'
-        postcode_match = re.search(r'\b[A-Z]{1,2}\d[A-Z]?\s*\d[A-Z]{2}\b', address)
+        # Get the full address from the parent element
+        address_element = driver.find_element(By.XPATH, "//div[contains(@class, 'col-md-3')]")
+        address_lines = address_element.text  # This gets all the text within the div, including the address
+
+        # Use regex to extract postcode from the full address string
+        postcode_match = re.search(r'\b[A-Z]{1,2}\d[A-Z]?\s*\d[A-Z]{2}\b', address_lines)
         postcode = postcode_match.group(0) if postcode_match else None
         # Return the scraped data
         return {
