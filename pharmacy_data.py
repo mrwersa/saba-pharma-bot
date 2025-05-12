@@ -13,11 +13,12 @@ import asyncio
 import nest_asyncio
 import os
 import re
+import sys
 
-# Allow nested async event loops (needed for Heroku + telegram bot)
+# Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
 
-# List of user agents for rotating browser fingerprint
+# List of User-Agents to randomize
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
@@ -27,7 +28,7 @@ USER_AGENTS = [
 
 def get_custom_chrome_options():
     chrome_options = ChromeOptions()
-    chrome_options.add_argument("--headless=new")  # For Heroku and modern Chrome
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -35,7 +36,7 @@ def get_custom_chrome_options():
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--window-size=1920x1080")
     chrome_options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
-    chrome_options.binary_location = os.environ.get('GOOGLE_CHROME_BIN')  # Required on Heroku
+    chrome_options.binary_location = os.environ.get('GOOGLE_CHROME_BIN')
     return chrome_options
 
 def clear_browser_storage(driver):
@@ -62,8 +63,7 @@ def fetch_pharmacies_selenium(postcode):
         raise EnvironmentError("CHROMEDRIVER_PATH environment variable is not set.")
 
     try:
-        driver = webdriver.Chrome(service=ChromeService(executable_path=driver_path), options=chrome_options)
-        driver.set_page_load_timeout(30)
+        driver = webdriver.Chrome(service=ChromeService(driver_path), options=chrome_options)
     except WebDriverException as e:
         print(f"WebDriver failed to start: {e}")
         return None
@@ -73,14 +73,14 @@ def fetch_pharmacies_selenium(postcode):
         driver.get(search_url)
         clear_browser_storage(driver)
 
-        search_box = WebDriverWait(driver, 20).until(
+        search_box = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.NAME, 'query'))
         )
         search_box.clear()
         search_box.send_keys(postcode)
         search_box.send_keys(Keys.RETURN)
 
-        search_results = WebDriverWait(driver, 20).until(
+        search_results = WebDriverWait(driver, 15).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'tr.search-result'))
         )
 
@@ -110,8 +110,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
         raise EnvironmentError("CHROMEDRIVER_PATH environment variable is not set.")
 
     try:
-        driver = webdriver.Chrome(service=ChromeService(executable_path=driver_path), options=chrome_options)
-        driver.set_page_load_timeout(30)
+        driver = webdriver.Chrome(service=ChromeService(driver_path), options=chrome_options)
     except WebDriverException as e:
         print(f"WebDriver failed to start: {e}")
         return None
@@ -121,7 +120,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
         driver.get(url)
         clear_browser_storage(driver)
 
-        elements = WebDriverWait(driver, 20).until(
+        elements = WebDriverWait(driver, 15).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.list-group-item-text'))
         )
 
@@ -165,7 +164,7 @@ def scrape_items_and_forms_selenium(pharmacy_id):
     finally:
         driver.quit()
 
-# Telegram bot command
+# Telegram bot command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('سلام عزیزم! من ربات اطلاعات داروخانه هستم. لطفاً یک کد پستی بریتانیا وارد کن')
 
@@ -210,7 +209,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No pharmacies found for the given postcode.")
 
-# Bot runner
 async def telegram_bot_main():
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token:
@@ -221,5 +219,13 @@ async def telegram_bot_main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     await application.run_polling()
 
+# Entry point
 if __name__ == "__main__":
-    asyncio.run(telegram_bot_main())
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(telegram_bot_main())
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot stopped.")
