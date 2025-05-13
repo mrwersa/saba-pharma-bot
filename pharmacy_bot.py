@@ -6,6 +6,7 @@ import random
 import re
 import json
 import time
+import urllib.parse  # For URL encoding
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -33,6 +34,23 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Helper function to escape special characters in Telegram messages
+def escape_telegram_special_chars(text):
+    """Escape special characters for Telegram messages."""
+    if not text:
+        return ""
+    # Escape characters that have special meaning in Markdown
+    return str(text).replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+
+# Helper function to validate ODS codes
+def is_valid_ods_code(code):
+    """Validate if a string is a proper ODS code."""
+    if not code:
+        return False
+    # Must be a 5-character code starting with a letter
+    return (re.match(r'^[A-Z][A-Z0-9]{4}$', code) and
+            code not in ["CLASS", "WIDTH", "HTTPS"])
 
 # User agents for browser requests
 USER_AGENTS = [
@@ -103,8 +121,8 @@ def search_pharmacies(postcode):
 
         # Try with a simpler, more reliable direct search URL
         try:
-            # Use the correct search URL based on tested format
-            search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '+')}"
+            # Use the correct search URL with proper URL encoding
+            search_url = f"https://www.pharmdata.co.uk/search.php?query={urllib.parse.quote_plus(postcode)}"
             logger.info(f"Using search URL: {search_url}")
 
             # Use a try-except block to handle timeouts during page load
@@ -123,12 +141,13 @@ def search_pharmacies(postcode):
             logger.info(f"Page title: {driver.title}")
             page_text_sample = driver.find_element(By.TAG_NAME, "body").text[:500]
             logger.info(f"Page text sample: {page_text_sample}")
-            
+
             # Save page source to see what's happening
             page_source = driver.page_source
             logger.info(f"Page source length: {len(page_source)}")
             logger.info(f"Source sample: {page_source[:200]}...")
-        except:
+        except Exception as e:
+            logger.warning(f"Error capturing page diagnostic info: {e}")
             pass
 
         # ATTEMPT 1: Check for pharmacy rows or tables
@@ -338,8 +357,8 @@ def get_pharmacy_details(pharmacy_id):
         driver.set_page_load_timeout(8)
         driver.set_script_timeout(5)
 
-        # Use the correct URL format for pharmacy details
-        url = f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
+        # Use the correct URL format for pharmacy details with proper URL encoding
+        url = f"https://www.pharmdata.co.uk/nacs_select.php?query={urllib.parse.quote_plus(pharmacy_id)}"
 
         logger.info(f"Loading pharmacy details from: {url}")
         try:
@@ -606,7 +625,7 @@ def get_pharmacy_details(pharmacy_id):
                 return None
 
     except Exception as e:
-        logger.error(f"Error getting pharmacy details: {e}")
+        logger.error(f"Error getting pharmacy details: {str(e)}", exc_info=True)
         return None
     finally:
         try:
@@ -654,12 +673,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Received message from user {user_id}: {user_input}")
 
         # Check if it's a direct pharmacy ODS code (format like FA123, FQ456)
-        if re.match(r'^[A-Z][A-Z0-9]{4}$', user_input, re.IGNORECASE):
+        if re.match(r'^[A-Z][A-Z0-9]{4}$', user_input, re.IGNORECASE) and user_input.upper() not in ["CLASS", "WIDTH", "HTTPS"]:
             pharmacy_id = user_input.upper()
             logger.info(f"Direct pharmacy ODS code detected: {pharmacy_id}")
 
-            # Send status message
-            status_msg = await update.message.reply_text(f"Looking up pharmacy with code {pharmacy_id}...")
+            # Send status message with better UX
+            status_msg = await update.message.reply_text(f"🔍 Looking up pharmacy with ODS code {pharmacy_id}...")
 
             # Get pharmacy details directly
             try:
@@ -671,26 +690,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     response = "📊 Pharmacy Information 📊\n"
 
                     # No separator needed for single result
-                    response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
+                    response += f"\n🏥 Pharmacy: {pharmacy.get('name', 'Unknown')}\n"
 
                     # Add address if available
-                    if 'address' in pharmacy and pharmacy['address'] != "Address not found":
-                        response += f"📍 Address: {pharmacy['address']}\n"
+                    if pharmacy.get('address') and pharmacy.get('address') != "Address not found":
+                        response += f"📍 Address: {pharmacy.get('address', 'Unknown')}\n"
 
                     # Add postcode
-                    response += f"📮 Postcode: {pharmacy['postcode']}\n"
+                    response += f"📮 Postcode: {pharmacy.get('postcode', 'Unknown')}\n"
 
                     # Add link to PharmData using pharmacy's ID or postcode as fallback
-                    pharmacy_link = pharmacy['id'] if re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy['id']) else pharmacy['postcode']
-                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_link}\n\n"
+                    pharmacy_link = pharmacy.get('id') if (pharmacy.get('id') and re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy.get('id'))) else pharmacy.get('postcode', '')
+                    if pharmacy_link:
+                        response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={urllib.parse.quote_plus(pharmacy_link)}\n\n"
+                    else:
+                        response += "\n"  # Add newline if no link
 
                     # Show metrics with numbers
-                    response += f"📦 Items Dispensed: {pharmacy['items']}\n"
-                    response += f"📝 Prescriptions: {pharmacy['forms']}\n"
-                    response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
-                    response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
-                    response += f"🔄 NMS: {pharmacy['nms']}\n"
-                    response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
+                    response += f"📦 Items Dispensed: {pharmacy.get('items', '0')}\n"
+                    response += f"📝 Prescriptions: {pharmacy.get('forms', '0')}\n"
+                    response += f"🩺 CPCS: {pharmacy.get('cpcs', '0')}\n"
+                    response += f"💊 Pharmacy First: {pharmacy.get('pharmacy_first', '0')}\n"
+                    response += f"🔄 NMS: {pharmacy.get('nms', '0')}\n"
+                    response += f"💻 EPS Takeup: {pharmacy.get('eps', '0%')}\n"
 
                     # Delete status message and send results
                     await status_msg.delete()
@@ -848,26 +870,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Create individual response for this pharmacy
                 response = "📊 Pharmacy Information 📊\n\n"
 
-                response += f"🏥 Pharmacy: {pharmacy['name']}\n"
+                response += f"🏥 Pharmacy: {pharmacy.get('name', 'Unknown')}\n"
 
                 # Add address if available
-                if 'address' in pharmacy and pharmacy['address'] != "Address not found":
-                    response += f"📍 Address: {pharmacy['address']}\n"
+                if pharmacy.get('address') and pharmacy.get('address') != "Address not found":
+                    response += f"📍 Address: {pharmacy.get('address', 'Unknown')}\n"
 
                 # Add postcode
-                response += f"📮 Postcode: {pharmacy['postcode']}\n"
+                response += f"📮 Postcode: {pharmacy.get('postcode', 'Unknown')}\n"
 
                 # Add link to PharmData using pharmacy's ID or postcode as fallback
-                pharmacy_link = pharmacy['id'] if re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy['id']) else pharmacy['postcode']
-                response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_link}\n\n"
+                pharmacy_link = pharmacy.get('id') if (pharmacy.get('id') and re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy.get('id'))) else pharmacy.get('postcode', '')
+                if pharmacy_link:
+                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={urllib.parse.quote_plus(pharmacy_link)}\n\n"
+                else:
+                    response += "\n"  # Add newline if no link
 
                 # Show metrics with numbers
-                response += f"📦 Items Dispensed: {pharmacy['items']}\n"
-                response += f"📝 Prescriptions: {pharmacy['forms']}\n"
-                response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
-                response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
-                response += f"🔄 NMS: {pharmacy['nms']}\n"
-                response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
+                response += f"📦 Items Dispensed: {pharmacy.get('items', '0')}\n"
+                response += f"📝 Prescriptions: {pharmacy.get('forms', '0')}\n"
+                response += f"🩺 CPCS: {pharmacy.get('cpcs', '0')}\n"
+                response += f"💊 Pharmacy First: {pharmacy.get('pharmacy_first', '0')}\n"
+                response += f"🔄 NMS: {pharmacy.get('nms', '0')}\n"
+                response += f"💻 EPS Takeup: {pharmacy.get('eps', '0%')}\n"
 
                 # Send this pharmacy's message
                 await update.message.reply_text(response)
