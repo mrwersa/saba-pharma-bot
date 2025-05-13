@@ -54,7 +54,12 @@ pip install -r requirements.txt
 
 3. Run the bot:
 ```
-python pharmacy_data.py
+python run.py
+```
+
+For development and debugging purposes, you can also run the bot directly from the main file:
+```
+RUN_FROM_FILE=true python pharmacy_data.py
 ```
 
 ## Features
@@ -86,3 +91,29 @@ This bot uses a **web** dyno instead of a worker dyno because:
 3. **Always On** - Both web and worker dynos can run continuously, but only web dynos can respond to HTTP requests from external services.
 
 If you were to use polling mode instead of webhook mode, you would use a worker dyno because polling doesn't require accepting incoming HTTP connections.
+
+## Troubleshooting
+
+### Event Loop Errors
+
+If you encounter errors like "Cannot close a running event loop", the bot architecture handles this by:
+
+1. Separating the bot logic (`pharmacy_data.py`) from the entry point (`run.py`)
+2. Using `close_loop=False` in the webhook and polling configurations
+3. Using `asyncio.run()` instead of manually managing event loops
+
+### Chrome/Selenium Issues
+
+If you encounter Chrome or Selenium-related errors:
+
+1. Check if all required X11 libraries are in the `Aptfile`
+2. Verify that the Chrome binary is being found correctly in the logs
+3. Try switching to a different Chrome version or ChromeDriver
+
+### Webhook Issues
+
+If the webhook isn't receiving messages:
+
+1. Confirm that `APP_NAME` is set correctly and matches your Heroku app name exactly
+2. Check the logs for successful webhook registration
+3. Test the bot in polling mode locally to confirm basic functionality
