@@ -79,11 +79,17 @@ def search_pharmacies(postcode):
     try:
         driver = webdriver.Chrome(options=options)
 
+        # Set a shorter page load timeout for better performance
+        driver.set_page_load_timeout(10)
+        driver.set_script_timeout(5)
+
         # Use the correct search URL based on your information
         search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '%20')}"
         logger.info(f"Using search URL: {search_url}")
         driver.get(search_url)
-        time.sleep(3)  # Give time for page to load
+
+        # Use WebDriverWait instead of time.sleep for better performance
+        WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         # Check if we have search results
         try:
@@ -218,12 +224,18 @@ def get_pharmacy_details(pharmacy_id):
     try:
         driver = webdriver.Chrome(options=options)
 
+        # Set timeouts for better performance
+        driver.set_page_load_timeout(10)
+        driver.set_script_timeout(5)
+
         # Use the correct URL format for pharmacy details
         url = f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
 
         logger.info(f"Loading pharmacy details from: {url}")
         driver.get(url)
-        time.sleep(3)  # Give time for page to load
+
+        # Use WebDriverWait instead of time.sleep for better performance
+        WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         # Check if page loaded successfully
         page_source = driver.page_source
@@ -232,132 +244,185 @@ def get_pharmacy_details(pharmacy_id):
             return None
 
         try:
-            # 1. Get pharmacy name - using panel-title-custom class from your example
+            # Get pharmacy name - try different approaches
             try:
-                name_element = driver.find_element(By.CSS_SELECTOR, ".panel-title-custom")
-                pharmacy_name = name_element.text.strip()
-
-                # Clean up name (remove codes in parentheses if present)
-                pharmacy_name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', pharmacy_name)
-                logger.info(f"Found pharmacy name: {pharmacy_name}")
-            except:
-                # Try alternative selectors if panel-title-custom not found
-                for selector in ["h1", "h2", ".pharmacy-name", ".panel-title"]:
-                    try:
-                        elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                        if elements and elements[0].text.strip():
-                            pharmacy_name = elements[0].text.strip()
+                # Try to find h1 or h2 elements first (likely to contain pharmacy name)
+                for heading_tag in ["h1", "h2", "h3"]:
+                    elements = driver.find_elements(By.TAG_NAME, heading_tag)
+                    for element in elements:
+                        text = element.text.strip()
+                        if text and "pharmacy" in text.lower():
+                            pharmacy_name = text
+                            # Clean up name (remove codes in parentheses if present)
                             pharmacy_name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', pharmacy_name)
+                            logger.info(f"Found pharmacy name from heading: {pharmacy_name}")
                             break
+                    else:
+                        continue
+                    break
+                else:
+                    # Try by class names
+                    for class_name in [".panel-title-custom", ".pharmacy-name", ".panel-title", ".title"]:
+                        try:
+                            elements = driver.find_elements(By.CSS_SELECTOR, class_name)
+                            if elements and elements[0].text.strip():
+                                pharmacy_name = elements[0].text.strip()
+                                pharmacy_name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', pharmacy_name)
+                                logger.info(f"Found pharmacy name from class {class_name}: {pharmacy_name}")
+                                break
+                        except:
+                            pass
+                    else:
+                        # Last resort: look for pharmacy name pattern in page text
+                        page_text = driver.find_element(By.TAG_NAME, "body").text
+                        name_match = re.search(r'([A-Za-z0-9\s&]+\bPharmacy\b|Boots|Lloyds\s+Pharmacy|ASDA\s+Pharmacy|Superdrug)', page_text)
+                        pharmacy_name = name_match.group(0) if name_match else f"Pharmacy {pharmacy_id}"
+                        logger.info(f"Found pharmacy name from regex: {pharmacy_name}")
+            except Exception as e:
+                logger.warning(f"Error finding pharmacy name: {e}")
+                pharmacy_name = f"Pharmacy {pharmacy_id}"
+
+            # Get address and postcode from page text
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+
+            # Try to find full address
+            address = "Address not found"
+            address_pattern = r'(?:ADDRESS|Address|address)[:\s]+(.*?)(?:\n|$)'
+            address_match = re.search(address_pattern, page_text)
+            if address_match:
+                address = address_match.group(1).strip()
+            else:
+                # Try to find comma-separated address near pharmacy name
+                if 'pharmacy_name' in locals():
+                    try:
+                        # Look for an address-like pattern (comma-separated text ending with postcode)
+                        address_pattern = r'(?:' + re.escape(pharmacy_name) + r'.*?)([^,\n]+(?:,[^,\n]+){2,})'
+                        address_match = re.search(address_pattern, page_text)
+                        if address_match:
+                            address = address_match.group(1).strip()
                     except:
                         pass
-                else:
-                    pharmacy_name = "Unknown Pharmacy"
 
-            # 2. Get postcode - using regex on page text
-            page_text = driver.find_element(By.TAG_NAME, "body").text
+            # Extract postcode from address or find separately
             uk_postcode_pattern = r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b'
             postcode_match = re.search(uk_postcode_pattern, page_text)
             postcode = postcode_match.group(0) if postcode_match else "N/A"
             logger.info(f"Found postcode: {postcode}")
 
-            # 3. Get metrics - specifically using the list-group-item-text class from your example
-            metrics = {}
+            # Now extract metrics based on what we know about PharmData
+            # Extract metrics and rank information
+            # PharmData shows metrics with rank patterns like: "0 (#11,367)"
 
-            # Try to find the list-group-item-text elements which contain metrics
+            # Items
+            items_value = "Registration Required"
+            items_rank = "N/A"
+            items_pattern = r'Items:?\s*(\d[\d,\.]*)\s*(?:\(#([\d,]+)\))?'
+            items_match = re.search(items_pattern, page_text)
+            if items_match:
+                items_value = items_match.group(1)
+                items_rank = items_match.group(2) if items_match.group(2) else "N/A"
+                logger.info(f"Found items metric: {items_value} (Rank: {items_rank})")
+
+            # Forms/Prescriptions
+            forms_value = "Registration Required"
+            forms_rank = "N/A"
+            forms_pattern = r'(?:Forms|Prescriptions):?\s*(\d[\d,\.]*)\s*(?:\(#([\d,]+)\))?'
+            forms_match = re.search(forms_pattern, page_text)
+            if forms_match:
+                forms_value = forms_match.group(1)
+                forms_rank = forms_match.group(2) if forms_match.group(2) else "N/A"
+                logger.info(f"Found forms metric: {forms_value} (Rank: {forms_rank})")
+
+            # CPCS
+            cpcs_value = "Registration Required"
+            cpcs_rank = "N/A"
+            cpcs_pattern = r'CPCS:?\s*(\d[\d,\.]*)\s*(?:\(#([\d,]+)\))?'
+            cpcs_match = re.search(cpcs_pattern, page_text)
+            if cpcs_match:
+                cpcs_value = cpcs_match.group(1)
+                cpcs_rank = cpcs_match.group(2) if cpcs_match.group(2) else "N/A"
+                logger.info(f"Found CPCS metric: {cpcs_value} (Rank: {cpcs_rank})")
+
+            # Pharmacy First
+            pharmacy_first_value = "Registration Required"
+            pharmacy_first_rank = "N/A"
+            pf_pattern = r'(?:Pharmacy First|PF):?\s*(\d[\d,\.]*)\s*(?:\(#([\d,]+)\))?'
+            pf_match = re.search(pf_pattern, page_text)
+            if pf_match:
+                pharmacy_first_value = pf_match.group(1)
+                pharmacy_first_rank = pf_match.group(2) if pf_match.group(2) else "N/A"
+                logger.info(f"Found Pharmacy First metric: {pharmacy_first_value} (Rank: {pharmacy_first_rank})")
+
+            # NMS
+            nms_value = "Registration Required"
+            nms_rank = "N/A"
+            nms_pattern = r'NMS:?\s*(\d[\d,\.]*)\s*(?:\(#([\d,]+)\))?'
+            nms_match = re.search(nms_pattern, page_text)
+            if nms_match:
+                nms_value = nms_match.group(1)
+                nms_rank = nms_match.group(2) if nms_match.group(2) else "N/A"
+                logger.info(f"Found NMS metric: {nms_value} (Rank: {nms_rank})")
+
+            # EPS Takeup
+            eps_value = "Registration Required"
+            eps_rank = "N/A"
+            eps_pattern = r'(?:EPS|EPS Takeup|EPS Nominations):?\s*(\d+%)\s*(?:\(([\d,]+)[^)]*\))?'
+            eps_match = re.search(eps_pattern, page_text)
+            if eps_match:
+                eps_value = eps_match.group(1)
+                eps_rank = eps_match.group(2) if eps_match.group(2) else "N/A"
+                logger.info(f"Found EPS metric: {eps_value} (Rank: {eps_rank})")
+
+            # Look for JavaScript data arrays which might contain metrics
             try:
-                metric_elements = driver.find_elements(By.CSS_SELECTOR, ".list-group-item-text")
-                logger.info(f"Found {len(metric_elements)} metrics using list-group-item-text class")
+                # Execute JavaScript to get metrics if available
+                script = """
+                    var dataObj = {};
+                    if (typeof figures !== 'undefined') {
+                        dataObj.figures = figures;
+                    }
+                    if (typeof items !== 'undefined') {
+                        dataObj.items = items;
+                    }
+                    if (typeof forms !== 'undefined') {
+                        dataObj.forms = forms;
+                    }
+                    if (typeof cpcs !== 'undefined') {
+                        dataObj.cpcs = cpcs;
+                    }
+                    if (typeof nms !== 'undefined') {
+                        dataObj.nms = nms;
+                    }
+                    if (typeof eps !== 'undefined') {
+                        dataObj.eps = eps;
+                    }
+                    return JSON.stringify(dataObj);
+                """
+                js_data = driver.execute_script(script)
+                if js_data:
+                    data_obj = json.loads(js_data)
+                    logger.info(f"Found JavaScript data: {data_obj.keys()}")
 
-                # Extract metrics based on position as shown in your example
-                if len(metric_elements) >= 6:
-                    # Items value (first element)
-                    items_text = metric_elements[0].text
-                    items_match = re.search(r'(\d[\d,\.]+)', items_text)
-                    items_value = items_match.group(1) if items_match else "N/A"
-
-                    # Forms value (second element)
-                    forms_text = metric_elements[1].text
-                    forms_match = re.search(r'(\d[\d,\.]+)', forms_text)
-                    forms_value = forms_match.group(1) if forms_match else "N/A"
-
-                    # CPCS value (third element)
-                    cpcs_text = metric_elements[2].text
-                    cpcs_match = re.search(r'(\d[\d,\.]+)', cpcs_text)
-                    cpcs_value = cpcs_match.group(1) if cpcs_match else "N/A"
-
-                    # Pharmacy First value (fourth element)
-                    pf_text = metric_elements[3].text
-                    pf_match = re.search(r'(\d[\d,\.]+)', pf_text)
-                    pharmacy_first_value = pf_match.group(1) if pf_match else "N/A"
-
-                    # NMS value (fifth element)
-                    nms_text = metric_elements[4].text
-                    nms_match = re.search(r'(\d[\d,\.]+)', nms_text)
-                    nms_value = nms_match.group(1) if nms_match else "N/A"
-
-                    # EPS value (sixth element)
-                    eps_text = metric_elements[5].text
-                    eps_match = re.search(r'(\d+)%', eps_text)
-                    eps_takeup = eps_match.group(0) if eps_match else "N/A"
-
-                    logger.info("Successfully extracted metrics from list-group-item-text elements")
-                else:
-                    logger.warning("Not enough list-group-item-text elements found")
-                    items_value = forms_value = cpcs_value = pharmacy_first_value = nms_value = eps_takeup = "N/A"
+                    # Extract metrics from JS data if available
+                    if 'figures' in data_obj:
+                        figures = data_obj['figures']
+                        if figures and len(figures) > 0:
+                            logger.info("Found figures array in JavaScript data")
+                            # Process figures data if needed
             except Exception as e:
-                logger.warning(f"Error extracting metrics from list-group-item-text: {e}")
-                items_value = forms_value = cpcs_value = pharmacy_first_value = nms_value = eps_takeup = "N/A"
+                logger.warning(f"Error extracting JavaScript data: {e}")
 
-            # If any metric is still N/A, try looking for class names with ks- prefix (from your example)
-            try:
-                if items_value == "N/A":
-                    items_element = driver.find_element(By.CSS_SELECTOR, ".ks-items")
-                    items_text = items_element.text
-                    items_match = re.search(r'(\d[\d,\.]+)', items_text)
-                    if items_match:
-                        items_value = items_match.group(1)
-
-                if forms_value == "N/A":
-                    forms_element = driver.find_element(By.CSS_SELECTOR, ".ks-forms")
-                    forms_text = forms_element.text
-                    forms_match = re.search(r'(\d[\d,\.]+)', forms_text)
-                    if forms_match:
-                        forms_value = forms_match.group(1)
-
-                if cpcs_value == "N/A":
-                    cpcs_element = driver.find_element(By.CSS_SELECTOR, ".ks-cpcs")
-                    cpcs_text = cpcs_element.text
-                    cpcs_match = re.search(r'(\d[\d,\.]+)', cpcs_text)
-                    if cpcs_match:
-                        cpcs_value = cpcs_match.group(1)
-
-                if nms_value == "N/A":
-                    nms_element = driver.find_element(By.CSS_SELECTOR, ".ks-nms")
-                    nms_text = nms_element.text
-                    nms_match = re.search(r'(\d[\d,\.]+)', nms_text)
-                    if nms_match:
-                        nms_value = nms_match.group(1)
-
-                if eps_takeup == "N/A":
-                    eps_element = driver.find_element(By.CSS_SELECTOR, ".ks-eps")
-                    eps_text = eps_element.text
-                    eps_match = re.search(r'(\d+)%', eps_text)
-                    if eps_match:
-                        eps_takeup = eps_match.group(0)
-            except Exception as e:
-                logger.warning(f"Error extracting metrics from ks- classes: {e}")
-
-            # Build pharmacy data object
+            # Build comprehensive pharmacy data object with all available information
             pharmacy_data = {
                 'name': pharmacy_name,
+                'address': address,
                 'postcode': postcode,
-                'items': items_value,
-                'forms': forms_value,
-                'cpcs': cpcs_value,
-                'pharmacy_first': pharmacy_first_value,
-                'nms': nms_value,
-                'eps': eps_takeup
+                'items': f"{items_value} (Rank: {items_rank})" if items_value != "Registration Required" else "Registration Required",
+                'forms': f"{forms_value} (Rank: {forms_rank})" if forms_value != "Registration Required" else "Registration Required",
+                'cpcs': f"{cpcs_value} (Rank: {cpcs_rank})" if cpcs_value != "Registration Required" else "Registration Required",
+                'pharmacy_first': f"{pharmacy_first_value} (Rank: {pharmacy_first_rank})" if pharmacy_first_value != "Registration Required" else "Registration Required",
+                'nms': f"{nms_value} (Rank: {nms_rank})" if nms_value != "Registration Required" else "Registration Required",
+                'eps': f"{eps_value} (Rank: {eps_rank})" if eps_value != "Registration Required" else "Registration Required"
             }
 
             logger.info(f"Extracted pharmacy data: {pharmacy_data}")
@@ -372,26 +437,28 @@ def get_pharmacy_details(pharmacy_id):
                 page_text = driver.find_element(By.TAG_NAME, "body").text
 
                 # Try to find pharmacy name
-                name_match = re.search(r'([A-Za-z0-9\s&]+\bPharmacy\b|Boots|Lloyds\s+Pharmacy)', page_text)
-                pharmacy_name = name_match.group(0) if name_match else "Unknown Pharmacy"
+                name_match = re.search(r'([A-Za-z0-9\s&]+\bPharmacy\b|Boots|Lloyds\s+Pharmacy|ASDA\s+Pharmacy|Superdrug)', page_text)
+                pharmacy_name = name_match.group(0) if name_match else f"Pharmacy {pharmacy_id}"
 
                 # Try to find postcode
                 uk_postcode_pattern = r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b'
                 postcode_match = re.search(uk_postcode_pattern, page_text)
                 postcode = postcode_match.group(0) if postcode_match else "N/A"
 
-                # Return minimal data
+                # Return minimal data with registration message
                 return {
                     'name': pharmacy_name,
+                    'address': "Address not found",
                     'postcode': postcode,
-                    'items': "N/A",
-                    'forms': "N/A",
-                    'cpcs': "N/A",
-                    'pharmacy_first': "N/A",
-                    'nms': "N/A",
-                    'eps': "N/A"
+                    'items': "Registration Required",
+                    'forms': "Registration Required",
+                    'cpcs': "Registration Required",
+                    'pharmacy_first': "Registration Required",
+                    'nms': "Registration Required",
+                    'eps': "Registration Required"
                 }
-            except:
+            except Exception as fallback_error:
+                logger.error(f"Fallback extraction failed: {fallback_error}")
                 return None
 
     except Exception as e:
@@ -408,14 +475,28 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     try:
         logger.info(f"User {update.effective_user.id} started the bot")
-        await update.message.reply_text('Hello! I am a Pharmacy Information bot. Please enter a UK postcode to find pharmacies.')
+        await update.message.reply_text(
+            'Hello! I am a UK Pharmacy Information bot. 🏥\n\n'
+            'Please enter a UK postcode to find pharmacies in your area.\n\n'
+            'Note: Some detailed metrics require registration on PharmData.co.uk, '
+            'but I will try to show you all available public information.'
+        )
     except Exception as e:
         logger.error(f"Error in start command: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command"""
     try:
-        await update.message.reply_text('To use this bot, simply enter a UK postcode and I will find pharmacies in that area.')
+        await update.message.reply_text(
+            '📋 *How to use this bot:*\n\n'
+            '1. Simply enter a valid UK postcode (e.g., SW1A 1AA)\n'
+            '2. I will find pharmacies in that area\n'
+            '3. For each pharmacy, I will show:\n'
+            '   • Pharmacy name and address\n'
+            '   • Any available metrics (Items, Forms, CPCS, etc.)\n\n'
+            '⚠️ *Please Note:* Some detailed metrics require registration on '
+            'PharmData.co.uk. Public data will be shown where available.'
+        )
     except Exception as e:
         logger.error(f"Error in help command: {e}")
 
@@ -424,55 +505,132 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_id = update.effective_user.id
         postcode = update.message.text.strip()
-        
+
         logger.info(f"Received message from user {user_id}: {postcode}")
-        
+
         if not postcode:
             await update.message.reply_text("Please enter a valid postcode.")
             return
-            
+
+        # Format the postcode correctly (uppercase, proper spacing)
+        postcode = postcode.upper().strip()
+
+        # More flexible validation of UK postcode with regex
+        # This matches various formats and will help normalize them
+        postcode_match = re.match(r'^([A-Z]{1,2}[0-9][A-Z0-9]?)[ -]?([0-9][A-Z]{2})$', postcode, re.IGNORECASE)
+
+        if not postcode_match:
+            await update.message.reply_text(
+                "Please enter a valid UK postcode format (e.g. 'SW1A 1AA').\n"
+                "Valid formats include 'SW1A 1AA', 'SW1A1AA', or 'sw1a 1aa'."
+            )
+            return
+
+        # Normalize the postcode format to ensure proper spacing
+        postcode = f"{postcode_match.group(1)} {postcode_match.group(2)}"
+        logger.info(f"Normalized postcode: {postcode}")
+
         # Send initial status message
         status_msg = await update.message.reply_text("Searching for pharmacies... 🔍")
-        
-        # Search for pharmacies
-        pharmacy_ids = search_pharmacies(postcode)
-        
+
+        # Create a task for searching pharmacies
+        try:
+            # Search for pharmacies with a timeout to prevent hanging
+            task = asyncio.create_task(
+                asyncio.to_thread(search_pharmacies, postcode)
+            )
+            # Wait for the task with timeout
+            pharmacy_ids = await asyncio.wait_for(task, timeout=15)
+        except asyncio.TimeoutError:
+            await status_msg.edit_text("The search is taking too long. Please try again later.")
+            return
+        except Exception as e:
+            logger.error(f"Error in pharmacy search: {e}")
+            await status_msg.edit_text("An error occurred while searching. Please try again.")
+            return
+
         if not pharmacy_ids:
             await status_msg.edit_text("No pharmacies found for the given postcode.")
             return
-            
+
         await status_msg.edit_text(f"Found {len(pharmacy_ids)} pharmacies. Retrieving information...")
-        
-        # Get details for each pharmacy
+
+        # Get details for each pharmacy concurrently
         results = []
-        for idx, pharmacy_id in enumerate(pharmacy_ids, 1):
-            # Update progress message
-            if idx % 2 == 0:
-                await status_msg.edit_text(f"Retrieving information ({idx}/{len(pharmacy_ids)})...")
-                
-            # Get pharmacy details
-            pharmacy = get_pharmacy_details(pharmacy_id)
-            if pharmacy:
-                results.append(pharmacy)
-                
-            # Avoid hitting rate limits
-            await asyncio.sleep(0.5)
-            
+        tasks = []
+
+        # Create tasks for all pharmacy details
+        for pharmacy_id in pharmacy_ids[:3]:  # Limit to top 3 for better performance
+            tasks.append(
+                asyncio.create_task(
+                    asyncio.to_thread(get_pharmacy_details, pharmacy_id)
+                )
+            )
+
+        # Wait for all tasks to complete
+        try:
+            # Process completed tasks as they finish
+            for completed_task in asyncio.as_completed(tasks, timeout=20):
+                pharmacy = await completed_task
+                if pharmacy:
+                    results.append(pharmacy)
+                    # Update status message
+                    await status_msg.edit_text(f"Retrieved information for {len(results)}/{len(tasks)} pharmacies...")
+        except asyncio.TimeoutError:
+            logger.warning("Timeout getting pharmacy details")
+            # Continue with any results we got
+            if not results:
+                await status_msg.edit_text("Timed out while retrieving pharmacy information.")
+                return
+        except Exception as e:
+            logger.error(f"Error processing pharmacy details: {e}")
+            # Continue with any results we got
+
         # Format and send results
         if results:
-            response = "📊 Results (3-Month Averages) 📊\n"
-            
+            response = "📊 Pharmacy Information 📊\n"
+
             for pharmacy in results:
-                response += (
-                    f"\n🏥 Pharmacy: {pharmacy['name']} ({pharmacy['postcode']})\n"
-                    f"📦 Items Dispensed: {pharmacy['items']}\n"
-                    f"📝 Prescriptions: {pharmacy['forms']}\n"
-                    f"🩺 CPCS: {pharmacy['cpcs']}\n"
-                    f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
-                    f"🔄 NMS: {pharmacy['nms']}\n"
-                    f"💻 EPS Takeup: {pharmacy['eps']}\n"
+                response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
+
+                # Add address if available
+                if 'address' in pharmacy and pharmacy['address'] != "Address not found":
+                    response += f"📍 Address: {pharmacy['address']}\n"
+
+                # Add postcode
+                response += f"📮 Postcode: {pharmacy['postcode']}\n"
+
+                # Add registration notice if all metrics require registration
+                all_require_registration = all(
+                    pharmacy.get(metric) == "Registration Required"
+                    for metric in ['items', 'forms', 'cpcs', 'pharmacy_first', 'nms', 'eps']
                 )
-                
+
+                if all_require_registration:
+                    response += "\n⚠️ Full metrics data requires registration at PharmData.co.uk\n"
+                else:
+                    # Include metrics that have values
+                    if pharmacy['items'] != "Registration Required":
+                        response += f"📦 Items Dispensed: {pharmacy['items']}\n"
+
+                    if pharmacy['forms'] != "Registration Required":
+                        response += f"📝 Prescriptions: {pharmacy['forms']}\n"
+
+                    if pharmacy['cpcs'] != "Registration Required":
+                        response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
+
+                    if pharmacy['pharmacy_first'] != "Registration Required":
+                        response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
+
+                    if pharmacy['nms'] != "Registration Required":
+                        response += f"🔄 NMS: {pharmacy['nms']}\n"
+
+                    if pharmacy['eps'] != "Registration Required":
+                        response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
+
+                    # Add note about other metrics requiring registration
+                    response += "\n⚠️ Some metrics require registration at PharmData.co.uk\n"
+
             # Delete status message and send results
             await status_msg.delete()
             await update.message.reply_text(response)
@@ -493,22 +651,42 @@ def main():
     if not bot_token:
         logger.error("No TELEGRAM_BOT_TOKEN provided in environment variables")
         return
-        
+
+    # Get port from environment for Heroku compatibility
+    port = int(os.environ.get('PORT', 8443))
+
     logger.info("Starting bot with polling")
-    
-    # Create the application
-    application = Application.builder().token(bot_token).build()
-    
+
+    # Create the application with appropriate settings
+    application = (
+        Application.builder()
+        .token(bot_token)
+        # Set higher concurrency for better performance
+        .concurrent_updates(True)
+        .build()
+    )
+
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
+
     # Add error handler
     application.add_error_handler(error_handler)
-    
+
     # Start the bot with polling (no webhook)
-    application.run_polling(poll_interval=1.0)
+    try:
+        logger.info("Starting bot with polling")
+        application.run_polling(
+            poll_interval=1.0,
+            timeout=30,
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query"]
+        )
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+
+    logger.info("Bot stopped")
 
 # Entry point
 if __name__ == "__main__":
