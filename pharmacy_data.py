@@ -14,6 +14,18 @@ import nest_asyncio
 import os
 import re
 import sys
+import time
+import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
 # Apply nest_asyncio to allow nesting of asynchronous calls
 nest_asyncio.apply()
@@ -36,7 +48,15 @@ def get_custom_chrome_options():
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--window-size=1920x1080")
     chrome_options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
-    chrome_options.binary_location = os.environ.get('GOOGLE_CHROME_BIN')
+
+    # Get Chrome binary from env var, with fallback path for Heroku
+    chrome_bin = os.environ.get('GOOGLE_CHROME_BIN', '/app/.apt/usr/bin/google-chrome')
+    if os.path.exists(chrome_bin):
+        chrome_options.binary_location = chrome_bin
+        logging.info(f"Using Chrome binary at: {chrome_bin}")
+    else:
+        logging.warning(f"Chrome binary not found at {chrome_bin}")
+
     return chrome_options
 
 def clear_browser_storage(driver):
@@ -54,18 +74,17 @@ def clear_browser_storage(driver):
 
 def fetch_pharmacies_selenium(postcode):
     if not postcode or not isinstance(postcode, str):
-        print("Invalid postcode input.")
+        logging.error("Invalid postcode input.")
         return None
 
     chrome_options = get_custom_chrome_options()
-    driver_path = os.environ.get('CHROMEDRIVER_PATH')
-    if not driver_path:
-        raise EnvironmentError("CHROMEDRIVER_PATH environment variable is not set.")
 
     try:
-        driver = webdriver.Chrome(service=ChromeService(driver_path), options=chrome_options)
+        # On Heroku with buildpacks, we can initialize Chrome directly without specifying driver path
+        driver = webdriver.Chrome(options=chrome_options)
+        logging.info("Chrome WebDriver initialized successfully")
     except WebDriverException as e:
-        print(f"WebDriver failed to start: {e}")
+        logging.error(f"WebDriver failed to start: {e}")
         return None
 
     try:
@@ -101,18 +120,17 @@ def fetch_pharmacies_selenium(postcode):
 
 def scrape_items_and_forms_selenium(pharmacy_id):
     if not pharmacy_id:
-        print("No pharmacy ID provided.")
+        logging.error("No pharmacy ID provided.")
         return None
 
     chrome_options = get_custom_chrome_options()
-    driver_path = os.environ.get('CHROMEDRIVER_PATH')
-    if not driver_path:
-        raise EnvironmentError("CHROMEDRIVER_PATH environment variable is not set.")
 
     try:
-        driver = webdriver.Chrome(service=ChromeService(driver_path), options=chrome_options)
+        # On Heroku with buildpacks, we can initialize Chrome directly without specifying driver path
+        driver = webdriver.Chrome(options=chrome_options)
+        logging.info(f"Chrome WebDriver initialized successfully for pharmacy ID: {pharmacy_id}")
     except WebDriverException as e:
-        print(f"WebDriver failed to start: {e}")
+        logging.error(f"WebDriver failed to start: {e}")
         return None
 
     try:
@@ -214,18 +232,70 @@ async def telegram_bot_main():
     if not bot_token:
         raise EnvironmentError("TELEGRAM_BOT_TOKEN environment variable is not set.")
 
+    # For Heroku, use webhook if PORT is set
+    port = int(os.environ.get('PORT', 5000))
+    app_name = os.environ.get('APP_NAME')
+
     application = ApplicationBuilder().token(bot_token).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    await application.run_polling()
+
+    # Add error handler
+    application.add_error_handler(error_handler)
+
+    # Use webhook if on Heroku (APP_NAME is set), otherwise use polling
+    if app_name:
+        webhook_url = f"https://{app_name}.herokuapp.com/{bot_token}"
+        logging.info(f"Starting webhook on port {port}")
+        await application.bot.set_webhook(url=webhook_url)
+        await application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            webhook_url=webhook_url
+        )
+    else:
+        logging.info("Starting polling")
+        await application.run_polling()
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log errors caused by updates."""
+    logging.error(f"Update {update} caused error: {context.error}")
+
+    # If update is available, send an error message
+    if update and isinstance(update, Update) and update.effective_message:
+        await update.effective_message.reply_text("Sorry, something went wrong. Please try again later.")
 
 # Entry point
 if __name__ == "__main__":
+    # Setup for Windows
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+    # Check if Chrome is available
+    try:
+        chrome_bin = os.environ.get('GOOGLE_CHROME_BIN', '/app/.apt/usr/bin/google-chrome')
+        if os.path.exists(chrome_bin):
+            logging.info(f"Chrome binary found at: {chrome_bin}")
+        else:
+            logging.warning(f"Chrome binary not found at expected path: {chrome_bin}")
+
+        # Test Chrome initialization
+        options = ChromeOptions()
+        options.add_argument('--headless=new')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox')
+        driver = webdriver.Chrome(options=options)
+        driver.quit()
+        logging.info("Chrome initialization test successful")
+    except Exception as e:
+        logging.error(f"Chrome initialization test failed: {e}")
+
+    # Run the bot
     loop = asyncio.get_event_loop()
     try:
+        logging.info("Starting Telegram bot...")
         loop.run_until_complete(telegram_bot_main())
     except (KeyboardInterrupt, SystemExit):
-        print("Bot stopped.")
+        logging.info("Bot stopped by user.")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
