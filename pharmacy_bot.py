@@ -520,6 +520,7 @@ def get_pharmacy_details(pharmacy_id):
 
             # Build comprehensive pharmacy data object with all available information
             pharmacy_data = {
+                'id': pharmacy_id,  # Add the pharmacy ID
                 'name': pharmacy_name,
                 'address': address,
                 'postcode': postcode,
@@ -553,6 +554,7 @@ def get_pharmacy_details(pharmacy_id):
 
                 # Return basic data
                 return {
+                    'id': pharmacy_id,  # Add the pharmacy ID
                     'name': pharmacy_name,
                     'address': "Address not found",
                     'postcode': postcode,
@@ -643,7 +645,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         response += f"📍 Address: {pharmacy['address']}\n"
 
                     # Add postcode
-                    response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
+                    response += f"📮 Postcode: {pharmacy['postcode']}\n"
+
+                    # Add link to PharmData
+                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}\n\n"
 
                     # Show metrics with numbers
                     response += f"📦 Items Dispensed: {pharmacy['items']}\n"
@@ -822,7 +827,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     response += f"📍 Address: {pharmacy['address']}\n"
 
                 # Add postcode
-                response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
+                response += f"📮 Postcode: {pharmacy['postcode']}\n"
+
+                # Extract pharmacy ID from array index
+                pharmacy_id = pharmacy_ids[i] if i < len(pharmacy_ids) else ""
+                if pharmacy_id:
+                    # Add link to PharmData
+                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}\n\n"
 
                 # Show metrics with numbers
                 response += f"📦 Items Dispensed: {pharmacy['items']}\n"
