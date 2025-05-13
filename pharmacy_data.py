@@ -110,13 +110,16 @@ def fetch_pharmacies_selenium(postcode):
         return pharmacy_ids if pharmacy_ids else None
 
     except TimeoutException:
-        print("Timeout while loading search results.")
+        logging.error("Timeout while loading search results.")
         return None
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logging.error(f"Unexpected error during pharmacy search: {e}")
         return None
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
 
 def scrape_items_and_forms_selenium(pharmacy_id):
     if not pharmacy_id:
@@ -174,13 +177,16 @@ def scrape_items_and_forms_selenium(pharmacy_id):
         }
 
     except TimeoutException:
-        print("Timed out while loading pharmacy details.")
+        logging.error(f"Timed out while loading pharmacy details for ID: {pharmacy_id}")
         return None
     except Exception as e:
-        print(f"Error while scraping data: {e}")
+        logging.error(f"Error while scraping data for pharmacy ID {pharmacy_id}: {e}")
         return None
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
 
 # Telegram bot command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,38 +200,61 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Please provide a postcode.')
         return
 
-    pharmacy_ids = fetch_pharmacies_selenium(postcode)
+    # Let the user know we're working on their request
+    await update.message.reply_text(f"درحال جستجوی داروخانه‌ها برای کد پستی {postcode}...")
 
-    if pharmacy_ids:
-        await update.message.reply_text("Fetching results...")
+    try:
+        # First progress update
+        progress_msg = await update.message.reply_text("در حال جستجو... 🔍")
+
+        pharmacy_ids = fetch_pharmacies_selenium(postcode)
+
+        if not pharmacy_ids:
+            await progress_msg.edit_text("هیچ داروخانه‌ای برای کد پستی داده شده پیدا نشد.")
+            return
+
+        # Update progress
+        await progress_msg.edit_text(f"{len(pharmacy_ids)} داروخانه پیدا شد. درحال دریافت اطلاعات...")
 
         results = []
+        total_pharmacies = len(pharmacy_ids)
 
-        for pharmacy_id in pharmacy_ids:
+        for idx, pharmacy_id in enumerate(pharmacy_ids, 1):
+            if idx % 2 == 0:  # Update progress every 2 pharmacies
+                await progress_msg.edit_text(f"دریافت اطلاعات ({idx}/{total_pharmacies})...")
+
             scraped_data = scrape_items_and_forms_selenium(pharmacy_id)
             if scraped_data:
                 results.append(scraped_data)
             else:
-                results.append(f"Failed to scrape data for pharmacy ID: {pharmacy_id}")
+                results.append(f"نتوانستم اطلاعات داروخانه با شناسه {pharmacy_id} را دریافت کنم.")
 
-        response = "\n--- Results (Averages over 3 months) ---\n"
+            # Add a small delay to avoid hitting rate limits
+            await asyncio.sleep(0.5)
+
+        # Format results
+        response = "📊 نتایج (میانگین ۳ ماهه اخیر) 📊\n"
         for result in results:
             if isinstance(result, dict):
                 response += (
-                    f"\nPharmacy: {result['Pharmacy Name']} ({result['Pharmacy Postcode']})\n"
-                    f"Items Dispensed: {result['Items']}\n"
-                    f"Prescriptions: {result['Forms']}\n"
-                    f"CPCS: {result['CPCS']}\n"
-                    f"Pharmacy First: {result['Pharmacy First']}\n"
-                    f"NMS: {result['NMS']}\n"
-                    f"EPS Takeup: {result['EPS Takeup']['Percentage']}\n"
+                    f"\n🏥 داروخانه: {result['Pharmacy Name']} ({result['Pharmacy Postcode']})\n"
+                    f"📦 اقلام توزیع شده: {result['Items']}\n"
+                    f"📝 نسخه ها: {result['Forms']}\n"
+                    f"🩺 CPCS: {result['CPCS']}\n"
+                    f"💊 Pharmacy First: {result['Pharmacy First']}\n"
+                    f"🔄 NMS: {result['NMS']}\n"
+                    f"💻 EPS Takeup: {result['EPS Takeup']['Percentage']}\n"
                 )
             else:
                 response += f"{result}\n"
 
+        # Delete the progress message and send the final results
+        await progress_msg.delete()
         await update.message.reply_text(response)
-    else:
-        await update.message.reply_text("No pharmacies found for the given postcode.")
+
+    except Exception as e:
+        logging.error(f"Error in handle_message: {e}")
+        await update.message.reply_text("مشکلی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید.")
 
 async def telegram_bot_main():
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
