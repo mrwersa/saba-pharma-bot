@@ -281,11 +281,12 @@ async def telegram_bot_main():
             listen="0.0.0.0",
             port=port,
             webhook_url=webhook_url,
-            allowed_updates=["message"]
+            allowed_updates=["message"],
+            close_loop=False  # Don't close the loop when done
         )
     else:
         logging.info("Starting polling")
-        await application.run_polling()
+        await application.run_polling(close_loop=False)  # Don't close the loop when done
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log errors caused by updates."""
@@ -320,12 +321,14 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"Chrome initialization test failed: {e}")
 
-    # Run the bot
-    try:
-        logging.info("Starting Telegram bot...")
-        # Use asyncio.run which properly manages the event loop
-        asyncio.run(telegram_bot_main())
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("Bot stopped by user.")
-    except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+    # When imported as a module, don't run the bot directly
+    # This section only runs if the file is executed directly as a script
+    if os.environ.get('RUN_FROM_FILE') == 'true':
+        try:
+            logging.info("Starting Telegram bot directly from pharmacy_data.py...")
+            # Use asyncio.run which properly manages the event loop
+            asyncio.run(telegram_bot_main())
+        except (KeyboardInterrupt, SystemExit):
+            logging.info("Bot stopped by user.")
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
