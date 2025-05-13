@@ -190,7 +190,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for idx, pharmacy_id in enumerate(pharmacy_ids, 1):
             # Update progress message
             if idx % 2 == 0:
-                await status_msg.edit_text(f"دریافت اطلاعات ({idx}/{len(pharmacy_ids)})...")
+                await status_msg.edit_text(f"Retrieving information ({idx}/{len(pharmacy_ids)})...")
                 
             # Get pharmacy details
             pharmacy = get_pharmacy_details(pharmacy_id)
