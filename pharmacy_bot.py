@@ -80,7 +80,7 @@ def search_pharmacies(postcode):
         driver = webdriver.Chrome(options=options)
         
         # First approach - Direct search URL
-        direct_search_url = f"https://www.pharmdata.co.uk/?q={postcode.replace(' ', '+')}"
+        direct_search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '+')}"
         logger.info(f"Trying direct search URL: {direct_search_url}")
         driver.get(direct_search_url)
         time.sleep(3)  # Give time for JavaScript to execute
