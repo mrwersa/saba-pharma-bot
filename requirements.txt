@@ -1,4 +1,4 @@
-python-telegram-bot==21.6
+python-telegram-bot[webhooks]==21.6
 selenium==4.12.0
 nest-asyncio==1.6.0
 python-dotenv==1.0.1
