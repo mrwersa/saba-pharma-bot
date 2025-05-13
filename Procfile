@@ -1,1 +1,1 @@
-worker: python pharmacy_data.py
+web: python pharmacy_data.py
