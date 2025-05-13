@@ -742,8 +742,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         postcode = f"{postcode_match.group(1)} {postcode_match.group(2)}"
         logger.info(f"Normalized postcode: {postcode}")
 
-        # Send initial status message
-        status_msg = await update.message.reply_text("Searching for pharmacies... 🔍")
+        # Send initial status message with better UX
+        status_msg = await update.message.reply_text(f"🔍 Searching for pharmacies near {postcode}...")
 
         # Create a task for searching pharmacies
         try:
@@ -781,8 +781,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
             
-        # Looking for pharmacies
-        await status_msg.edit_text(f"🏥 Looking for pharmacies in {postcode}...")
+        # Found pharmacy IDs, now getting details
+        await status_msg.edit_text(f"📍 Found pharmacies in {postcode}! Getting details...")
 
         # Get details for each pharmacy concurrently
         results = []
@@ -803,11 +803,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pharmacy = await completed_task
                 if pharmacy:
                     results.append(pharmacy)
-                    # Update status message with current count
-                    if len(results) == 1:
-                        await status_msg.edit_text(f"Found 1 pharmacy, searching for more...")
+                    # Update status message with current count and progress
+                    total = len(tasks)
+                    completed = len(results)
+                    if completed == 1:
+                        await status_msg.edit_text(f"📊 Retrieved details for 1 pharmacy ({completed}/{total})...")
                     else:
-                        await status_msg.edit_text(f"Found {len(results)} pharmacies, searching for more...")
+                        await status_msg.edit_text(f"📊 Retrieved details for {completed} pharmacies ({completed}/{total})...")
         except asyncio.TimeoutError:
             logger.warning("Timeout getting pharmacy details")
             # Continue with any results we got
@@ -825,7 +827,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Format and send each pharmacy as a separate message
         if results:
-            # Delete status message before sending results
+            # Show completion message before results
+            boots_count = sum(1 for p in results if "Boots" in p.get('name', ''))
+            other_count = len(results) - boots_count
+
+            if boots_count > 0 and other_count > 0:
+                await status_msg.edit_text(f"✅ Found {boots_count} Boots and {other_count} other pharmacies near {postcode}. Sending details...")
+            elif boots_count > 0:
+                await status_msg.edit_text(f"✅ Found {boots_count} Boots pharmacy/pharmacies near {postcode}. Sending details...")
+            else:
+                await status_msg.edit_text(f"✅ Found {len(results)} pharmacies near {postcode}. Sending details...")
+
+            # Short delay to let the user see the completion message
+            await asyncio.sleep(1)
+            # Delete status message before sending detailed results
             await status_msg.delete()
 
             # Send each pharmacy as a separate message
