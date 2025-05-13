@@ -602,12 +602,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             '(e.g., FJ144) if you already know it\n\n'
             '📊 *Information shown:*\n'
             '• Pharmacy name and address\n'
-            '• Items Dispensed\n'
-            '• Prescriptions\n'
-            '• CPCS\n'
-            '• Pharmacy First\n'
-            '• NMS\n'
-            '• EPS Takeup'
+            '• Available pharmacy services'
         )
     except Exception as e:
         logger.error(f"Error in help command: {e}")
@@ -646,13 +641,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Add postcode
                     response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
 
-                    # Always show all metrics
-                    response += f"📦 Items Dispensed: {pharmacy['items']}\n"
-                    response += f"📝 Prescriptions: {pharmacy['forms']}\n"
-                    response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
-                    response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
-                    response += f"🔄 NMS: {pharmacy['nms']}\n"
-                    response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
+                    # Show metrics without numbers
+                    response += f"📦 Items Dispensed\n"
+                    response += f"📝 Prescriptions\n"
+                    response += f"🩺 CPCS\n"
+                    response += f"💊 Pharmacy First\n"
+                    response += f"🔄 NMS\n"
+                    response += f"💻 EPS Takeup\n"
 
                     # Delete status message and send results
                     await status_msg.delete()
@@ -747,12 +742,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pharmacies_count = len(pharmacy_ids)
         await status_msg.edit_text(f"🏥 Found {pharmacies_count} pharmacies in {postcode}. Retrieving information...")
 
-        # Get details for each pharmacy concurrently
+        # Get details for each pharmacy concurrently, filter for Boots only
         results = []
         tasks = []
 
         # Create tasks for all pharmacy details
-        for pharmacy_id in pharmacy_ids[:3]:  # Limit to top 3 for better performance
+        for pharmacy_id in pharmacy_ids[:5]:  # Check more to increase chance of finding Boots
             tasks.append(
                 asyncio.create_task(
                     asyncio.to_thread(get_pharmacy_details, pharmacy_id)
@@ -762,12 +757,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Wait for all tasks to complete
         try:
             # Process completed tasks as they finish
+            boots_found = False
             for completed_task in asyncio.as_completed(tasks, timeout=30):
                 pharmacy = await completed_task
                 if pharmacy:
-                    results.append(pharmacy)
+                    # Only include Boots pharmacies
+                    if "Boots" in pharmacy["name"]:
+                        results = [pharmacy]  # Only keep the Boots result
+                        boots_found = True
+                        # Update status message
+                        await status_msg.edit_text(f"Found Boots pharmacy! Getting details...")
+                        break  # Stop after finding Boots
+                    else:
+                        # Store result only if we don't have Boots yet
+                        if not boots_found:
+                            results.append(pharmacy)
                     # Update status message
-                    await status_msg.edit_text(f"Retrieved information for {len(results)}/{len(tasks)} pharmacies...")
+                    await status_msg.edit_text(f"Retrieved information for pharmacy {len(results)}/{len(tasks)}...")
         except asyncio.TimeoutError:
             logger.warning("Timeout getting pharmacy details")
             # Continue with any results we got
@@ -777,6 +783,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Error processing pharmacy details: {e}")
             # Continue with any results we got
+
+        # If we have multiple results but none are Boots, just keep the first one
+        if len(results) > 1 and not any("Boots" in p["name"] for p in results):
+            results = [results[0]]
 
         # Format and send results
         if results:
@@ -796,13 +806,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Add postcode
                 response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
 
-                # Always show all metrics
-                response += f"📦 Items Dispensed: {pharmacy['items']}\n"
-                response += f"📝 Prescriptions: {pharmacy['forms']}\n"
-                response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
-                response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
-                response += f"🔄 NMS: {pharmacy['nms']}\n"
-                response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
+                # Show metrics without numbers
+                response += f"📦 Items Dispensed\n"
+                response += f"📝 Prescriptions\n"
+                response += f"🩺 CPCS\n"
+                response += f"💊 Pharmacy First\n"
+                response += f"🔄 NMS\n"
+                response += f"💻 EPS Takeup\n"
 
             # Delete status message and send results
             await status_msg.delete()
