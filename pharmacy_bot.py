@@ -150,14 +150,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     try:
         logger.info(f"User {update.effective_user.id} started the bot")
-        await update.message.reply_text('سلام عزیزم! من ربات اطلاعات داروخانه هستم. لطفاً یک کد پستی بریتانیا وارد کن')
+        await update.message.reply_text('Hello! I am a Pharmacy Information bot. Please enter a UK postcode to find pharmacies.')
     except Exception as e:
         logger.error(f"Error in start command: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command"""
     try:
-        await update.message.reply_text('برای استفاده از ربات فقط کافیست یک کد پستی بریتانیا وارد کنید.')
+        await update.message.reply_text('To use this bot, simply enter a UK postcode and I will find pharmacies in that area.')
     except Exception as e:
         logger.error(f"Error in help command: {e}")
 
@@ -168,22 +168,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         postcode = update.message.text.strip()
         
         logger.info(f"Received message from user {user_id}: {postcode}")
-        
+
         if not postcode:
-            await update.message.reply_text("لطفاً یک کد پستی وارد کنید.")
+            await update.message.reply_text("Please enter a valid postcode.")
             return
-            
+
         # Send initial status message
-        status_msg = await update.message.reply_text("در حال جستجو... 🔍")
+        status_msg = await update.message.reply_text("Searching for pharmacies... 🔍")
         
         # Search for pharmacies
         pharmacy_ids = search_pharmacies(postcode)
         
         if not pharmacy_ids:
-            await status_msg.edit_text("هیچ داروخانه‌ای برای کد پستی داده شده پیدا نشد.")
+            await status_msg.edit_text("No pharmacies found for the given postcode.")
             return
-            
-        await status_msg.edit_text(f"{len(pharmacy_ids)} داروخانه پیدا شد. در حال دریافت اطلاعات...")
+
+        await status_msg.edit_text(f"Found {len(pharmacy_ids)} pharmacies. Retrieving information...")
         
         # Get details for each pharmacy
         results = []
