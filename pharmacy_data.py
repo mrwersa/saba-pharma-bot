@@ -290,15 +290,12 @@ async def telegram_bot_main():
         logging.info(f"Starting webhook on port {port}")
         logging.info(f"Setting webhook URL: {webhook_url}")
 
-        # Set the webhook
-        await application.bot.set_webhook(url=webhook_url)
-
-        # Start the webhook server
+        # Start the webhook server with the webhook URL
         await application.run_webhook(
             listen="0.0.0.0",
             port=port,
             url_path=webhook_path,  # Important: this must match the path in webhook_url
-            webhook_url=None,  # Don't set the webhook again during run_webhook
+            webhook_url=webhook_url,  # Must provide a valid HTTPS URL here
             allowed_updates=["message", "callback_query"],
             close_loop=False  # Don't close the loop when done
         )
