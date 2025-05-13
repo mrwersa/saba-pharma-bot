@@ -43,20 +43,35 @@ USER_AGENTS = [
 
 # Chrome setup
 def setup_chrome():
-    """Configure Chrome options for Selenium"""
+    """Configure Chrome options for Selenium optimized for performance on Heroku"""
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-extensions")
-    options.add_argument("--window-size=1920,1080")  # Ensure large window size for seeing all elements
-    # Use a realistic user agent
-    options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
-    
-    # Enable JavaScript
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--disable-web-security")
+    options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees")
+    options.add_argument("--disable-site-isolation-trials")
+    options.add_argument("--disable-application-cache")
+    options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--window-size=800,600")  # Smaller window for faster rendering
+
+    # Reduce memory usage
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-3d-apis")
+    options.add_argument("--disable-ipc-flooding-protection")
+
+    # Use a realistic user agent but don't randomize (for caching benefits)
+    options.add_argument(f"user-agent={USER_AGENTS[0]}")
+
+    # Enable JavaScript but with optimizations
     options.add_argument("--enable-javascript")
-    
+    options.add_argument("--disable-blink-features=AutomationControlled")
+
     # Check for Chrome binary location
     for chrome_path in [
         os.environ.get('GOOGLE_CHROME_BIN'),
@@ -67,7 +82,7 @@ def setup_chrome():
             logger.info(f"Using Chrome binary at: {chrome_path}")
             options.binary_location = chrome_path
             break
-            
+
     return options
 
 # Web scraping functions
@@ -82,17 +97,26 @@ def search_pharmacies(postcode):
     try:
         driver = webdriver.Chrome(options=options)
 
-        # Set a longer page load timeout to ensure full page loading
-        driver.set_page_load_timeout(15)
-        driver.set_script_timeout(10)
+        # Set shorter timeouts to prevent hangs on Heroku
+        driver.set_page_load_timeout(8)
+        driver.set_script_timeout(5)
 
-        # Use the correct search URL based on your information
-        search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '+')}"
-        logger.info(f"Using search URL: {search_url}")
-        driver.get(search_url)
+        # Try with a simpler, more reliable direct search URL
+        try:
+            # Use the correct search URL based on tested format
+            search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '+')}"
+            logger.info(f"Using search URL: {search_url}")
 
-        # Use WebDriverWait with longer timeout to ensure page loads completely
-        WebDriverWait(driver, 8).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            # Use a try-except block to handle timeouts during page load
+            try:
+                driver.get(search_url)
+                # Wait for minimum page content to appear
+                WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            except TimeoutException:
+                logger.warning("Initial page load timed out, continuing with partial page...")
+                # Continue anyway as we might have partial content
+        except Exception as e:
+            logger.warning(f"Error during initial page load: {e}")
         
         # Debug info for troubleshooting search issues
         try:
@@ -305,18 +329,21 @@ def get_pharmacy_details(pharmacy_id):
     try:
         driver = webdriver.Chrome(options=options)
 
-        # Set timeouts for better performance
-        driver.set_page_load_timeout(15)
-        driver.set_script_timeout(10)
+        # Set shorter timeouts for better performance on Heroku
+        driver.set_page_load_timeout(8)
+        driver.set_script_timeout(5)
 
         # Use the correct URL format for pharmacy details
         url = f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
 
         logger.info(f"Loading pharmacy details from: {url}")
-        driver.get(url)
-
-        # Use WebDriverWait instead of time.sleep for better performance
-        WebDriverWait(driver, 8).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        try:
+            driver.get(url)
+            # Use a shorter timeout for the page load
+            WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        except TimeoutException:
+            logger.warning(f"Details page load timed out for {pharmacy_id}, continuing with partial content...")
+            # Continue with whatever content we have
 
         # Check if page loaded successfully
         page_source = driver.page_source
@@ -567,27 +594,78 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text(
             '📋 *How to use this bot:*\n\n'
-            '1. Simply enter a valid UK postcode (e.g., SW1A 1AA)\n'
-            '2. I will find pharmacies in that area\n'
-            '3. For each pharmacy, I will show:\n'
-            '   • Pharmacy name and address\n'
-            '   • Items Dispensed and Rank\n'
-            '   • Prescriptions and Rank\n'
-            '   • CPCS and Rank\n'
-            '   • Pharmacy First and Rank\n'
-            '   • NMS and Rank\n'
-            '   • EPS Takeup and Rank'
+            '🔎 *Search by postcode:*\n'
+            '1. Enter a valid UK postcode (e.g., SW1A 1AA)\n'
+            '2. I will find pharmacies in that area\n\n'
+            '🔢 *Direct lookup:*\n'
+            'You can also enter a specific pharmacy ODS code\n'
+            '(e.g., FJ144) if you already know it\n\n'
+            '📊 *Information shown:*\n'
+            '• Pharmacy name and address\n'
+            '• Items Dispensed and Rank\n'
+            '• Prescriptions and Rank\n'
+            '• CPCS and Rank\n'
+            '• Pharmacy First and Rank\n'
+            '• NMS and Rank\n'
+            '• EPS Takeup and Rank'
         )
     except Exception as e:
         logger.error(f"Error in help command: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process user messages with postcodes"""
+    """Process user messages with postcodes or direct pharmacy codes"""
     try:
         user_id = update.effective_user.id
-        postcode = update.message.text.strip()
+        user_input = update.message.text.strip()
 
-        logger.info(f"Received message from user {user_id}: {postcode}")
+        logger.info(f"Received message from user {user_id}: {user_input}")
+
+        # Check if it's a direct pharmacy ODS code (format like FA123, FQ456)
+        if re.match(r'^[A-Z][A-Z0-9]{4}$', user_input, re.IGNORECASE):
+            pharmacy_id = user_input.upper()
+            logger.info(f"Direct pharmacy ODS code detected: {pharmacy_id}")
+
+            # Send status message
+            status_msg = await update.message.reply_text(f"Looking up pharmacy with code {pharmacy_id}...")
+
+            # Get pharmacy details directly
+            try:
+                # Use a separate thread for the pharmacy details lookup
+                pharmacy = await asyncio.to_thread(get_pharmacy_details, pharmacy_id)
+
+                if pharmacy:
+                    # Format the single pharmacy result
+                    response = "📊 Pharmacy Information 📊\n"
+                    response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
+
+                    # Add address if available
+                    if 'address' in pharmacy and pharmacy['address'] != "Address not found":
+                        response += f"📍 Address: {pharmacy['address']}\n"
+
+                    # Add postcode
+                    response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
+
+                    # Always show all metrics
+                    response += f"📦 Items Dispensed: {pharmacy['items']}\n"
+                    response += f"📝 Prescriptions: {pharmacy['forms']}\n"
+                    response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
+                    response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
+                    response += f"🔄 NMS: {pharmacy['nms']}\n"
+                    response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
+
+                    # Delete status message and send results
+                    await status_msg.delete()
+                    await update.message.reply_text(response)
+                else:
+                    await status_msg.edit_text(f"Pharmacy with ODS code {pharmacy_id} not found.")
+            except Exception as e:
+                logger.error(f"Error getting direct pharmacy details: {e}")
+                await status_msg.edit_text(f"Error retrieving pharmacy with code {pharmacy_id}")
+
+            return
+
+        # Otherwise treat as a postcode
+        postcode = user_input
 
         # For debugging - notify admin about usage
         if os.environ.get("ADMIN_USER_ID"):
