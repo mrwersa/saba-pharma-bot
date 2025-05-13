@@ -323,7 +323,12 @@ def search_pharmacies(postcode):
 def get_pharmacy_details(pharmacy_id):
     """Get details for a specific pharmacy using the correct nacs_select.php URL"""
     logger.info(f"Getting details for pharmacy ID: {pharmacy_id}")
-    
+
+    # Validate pharmacy ID is in proper ODS code format
+    if not re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy_id):
+        logger.warning(f"Invalid pharmacy ID format: {pharmacy_id} - must be a valid ODS code")
+        # We'll try our best with this ID, but will extract a proper ODS code later
+
     options = setup_chrome()
 
     try:
@@ -519,8 +524,24 @@ def get_pharmacy_details(pharmacy_id):
                 logger.warning(f"Error extracting JavaScript data: {e}")
 
             # Build comprehensive pharmacy data object with all available information
+            # Extract a proper ODS code from page content if the provided ID isn't valid
+            proper_ods_code = pharmacy_id
+            if not re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy_id):
+                # Look for ODS codes in page text
+                page_text = driver.find_element(By.TAG_NAME, "body").text
+                ods_matches = re.findall(r'\b([A-Z][A-Z0-9]{4})\b', page_text)
+
+                for code in ods_matches:
+                    if code not in ["CLASS", "WIDTH", "HTTPS"] and re.match(r'^[A-Z][A-Z0-9]{4}$', code):
+                        proper_ods_code = code
+                        logger.info(f"Extracted proper ODS code: {proper_ods_code}")
+                        break
+
+                if proper_ods_code == pharmacy_id:
+                    logger.warning(f"Could not find a proper ODS code, using original ID: {pharmacy_id}")
+
             pharmacy_data = {
-                'id': pharmacy_id,  # Add the pharmacy ID
+                'id': proper_ods_code,  # Add the pharmacy ID (now ensured to be ODS code format)
                 'name': pharmacy_name,
                 'address': address,
                 'postcode': postcode,
@@ -552,9 +573,24 @@ def get_pharmacy_details(pharmacy_id):
                 postcode_match = re.search(uk_postcode_pattern, page_text)
                 postcode = postcode_match.group(0) if postcode_match else "N/A"
 
-                # Return basic data
+                # Extract a proper ODS code from page content if the provided ID isn't valid
+                proper_ods_code = pharmacy_id
+                if not re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy_id):
+                    # Look for ODS codes in page text
+                    ods_matches = re.findall(r'\b([A-Z][A-Z0-9]{4})\b', page_text)
+
+                    for code in ods_matches:
+                        if code not in ["CLASS", "WIDTH", "HTTPS"] and re.match(r'^[A-Z][A-Z0-9]{4}$', code):
+                            proper_ods_code = code
+                            logger.info(f"Fallback: Extracted proper ODS code: {proper_ods_code}")
+                            break
+
+                    if proper_ods_code == pharmacy_id:
+                        logger.warning(f"Fallback: Could not find a proper ODS code, using original ID: {pharmacy_id}")
+
+                # Return basic data with validated ID
                 return {
-                    'id': pharmacy_id,  # Add the pharmacy ID
+                    'id': proper_ods_code,  # Add the validated pharmacy ID
                     'name': pharmacy_name,
                     'address': "Address not found",
                     'postcode': postcode,
@@ -647,8 +683,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Add postcode
                     response += f"📮 Postcode: {pharmacy['postcode']}\n"
 
-                    # Add link to PharmData
-                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}\n\n"
+                    # Add link to PharmData using pharmacy's ID or postcode as fallback
+                    pharmacy_link = pharmacy['id'] if re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy['id']) else pharmacy['postcode']
+                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_link}\n\n"
 
                     # Show metrics with numbers
                     response += f"📦 Items Dispensed: {pharmacy['items']}\n"
@@ -829,11 +866,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Add postcode
                 response += f"📮 Postcode: {pharmacy['postcode']}\n"
 
-                # Extract pharmacy ID from array index
-                pharmacy_id = pharmacy_ids[i] if i < len(pharmacy_ids) else ""
-                if pharmacy_id:
-                    # Add link to PharmData
-                    response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}\n\n"
+                # Add link to PharmData using pharmacy's ID or postcode as fallback
+                pharmacy_link = pharmacy['id'] if re.match(r'^[A-Z][A-Z0-9]{4}$', pharmacy['id']) else pharmacy['postcode']
+                response += f"🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_link}\n\n"
 
                 # Show metrics with numbers
                 response += f"📦 Items Dispensed: {pharmacy['items']}\n"
