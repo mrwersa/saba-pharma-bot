@@ -645,13 +645,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Add postcode
                     response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
 
-                    # Show metrics without numbers
-                    response += f"📦 Items Dispensed\n"
-                    response += f"📝 Prescriptions\n"
-                    response += f"🩺 CPCS\n"
-                    response += f"💊 Pharmacy First\n"
-                    response += f"🔄 NMS\n"
-                    response += f"💻 EPS Takeup\n"
+                    # Show metrics with numbers
+                    response += f"📦 Items Dispensed: {pharmacy['items']}\n"
+                    response += f"📝 Prescriptions: {pharmacy['forms']}\n"
+                    response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
+                    response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
+                    response += f"🔄 NMS: {pharmacy['nms']}\n"
+                    response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
 
                     # Delete status message and send results
                     await status_msg.delete()
@@ -824,13 +824,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Add postcode
                 response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
 
-                # Show metrics without numbers
-                response += f"📦 Items Dispensed\n"
-                response += f"📝 Prescriptions\n"
-                response += f"🩺 CPCS\n"
-                response += f"💊 Pharmacy First\n"
-                response += f"🔄 NMS\n"
-                response += f"💻 EPS Takeup\n"
+                # Show metrics with numbers
+                response += f"📦 Items Dispensed: {pharmacy['items']}\n"
+                response += f"📝 Prescriptions: {pharmacy['forms']}\n"
+                response += f"🩺 CPCS: {pharmacy['cpcs']}\n"
+                response += f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
+                response += f"🔄 NMS: {pharmacy['nms']}\n"
+                response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
 
             # Delete status message and send results
             await status_msg.delete()
