@@ -523,12 +523,12 @@ def get_pharmacy_details(pharmacy_id):
                 'name': pharmacy_name,
                 'address': address,
                 'postcode': postcode,
-                'items': f"{items_value} (Rank: {items_rank})",
-                'forms': f"{forms_value} (Rank: {forms_rank})",
-                'cpcs': f"{cpcs_value} (Rank: {cpcs_rank})",
-                'pharmacy_first': f"{pharmacy_first_value} (Rank: {pharmacy_first_rank})",
-                'nms': f"{nms_value} (Rank: {nms_rank})",
-                'eps': f"{eps_value} (Rank: {eps_rank})"
+                'items': f"{items_value}",
+                'forms': f"{forms_value}",
+                'cpcs': f"{cpcs_value}",
+                'pharmacy_first': f"{pharmacy_first_value}",
+                'nms': f"{nms_value}",
+                'eps': f"{eps_value}"
             }
 
             logger.info(f"Extracted pharmacy data: {pharmacy_data}")
@@ -556,12 +556,12 @@ def get_pharmacy_details(pharmacy_id):
                     'name': pharmacy_name,
                     'address': "Address not found",
                     'postcode': postcode,
-                    'items': "0 (Rank: N/A)",
-                    'forms': "0 (Rank: N/A)",
-                    'cpcs': "0 (Rank: N/A)",
-                    'pharmacy_first': "0 (Rank: N/A)",
-                    'nms': "0 (Rank: N/A)",
-                    'eps': "0% (Rank: N/A)"
+                    'items': "0",
+                    'forms': "0",
+                    'cpcs': "0",
+                    'pharmacy_first': "0",
+                    'nms': "0",
+                    'eps': "0%"
                 }
             except Exception as fallback_error:
                 logger.error(f"Fallback extraction failed: {fallback_error}")
@@ -602,12 +602,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             '(e.g., FJ144) if you already know it\n\n'
             '📊 *Information shown:*\n'
             '• Pharmacy name and address\n'
-            '• Items Dispensed and Rank\n'
-            '• Prescriptions and Rank\n'
-            '• CPCS and Rank\n'
-            '• Pharmacy First and Rank\n'
-            '• NMS and Rank\n'
-            '• EPS Takeup and Rank'
+            '• Items Dispensed\n'
+            '• Prescriptions\n'
+            '• CPCS\n'
+            '• Pharmacy First\n'
+            '• NMS\n'
+            '• EPS Takeup'
         )
     except Exception as e:
         logger.error(f"Error in help command: {e}")
@@ -636,6 +636,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if pharmacy:
                     # Format the single pharmacy result
                     response = "📊 Pharmacy Information 📊\n"
+                    # No separator needed for single result
                     response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
 
                     # Add address if available
@@ -781,16 +782,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if results:
             response = "📊 Pharmacy Information 📊\n"
 
-            for pharmacy in results:
+            for i, pharmacy in enumerate(results):
+                # Add separator line between pharmacies (except for the first one)
+                if i > 0:
+                    response += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+
                 response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
-                    
+
                 # Add address if available
                 if 'address' in pharmacy and pharmacy['address'] != "Address not found":
                     response += f"📍 Address: {pharmacy['address']}\n"
-                
+
                 # Add postcode
                 response += f"📮 Postcode: {pharmacy['postcode']}\n\n"
-                
+
                 # Always show all metrics
                 response += f"📦 Items Dispensed: {pharmacy['items']}\n"
                 response += f"📝 Prescriptions: {pharmacy['forms']}\n"
