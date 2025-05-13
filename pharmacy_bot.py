@@ -72,179 +72,135 @@ def setup_chrome():
 
 # Web scraping functions
 def search_pharmacies(postcode):
-    """Search for pharmacies by postcode using multiple strategies"""
+    """Search for pharmacies by postcode using the correct search URL"""
     logger.info(f"Searching for pharmacies with postcode: {postcode}")
     options = setup_chrome()
-    
+
     try:
         driver = webdriver.Chrome(options=options)
-        
-        # First approach - Direct search URL
-        direct_search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '+')}"
-        logger.info(f"Trying direct search URL: {direct_search_url}")
-        driver.get(direct_search_url)
-        time.sleep(3)  # Give time for JavaScript to execute
-        
-        # Check current URL - if redirected to a pharmacy, extract ID
-        current_url = driver.current_url
-        pharmacy_id_match = re.search(r'/pharmacy/([A-Z0-9]+)', current_url)
-        if pharmacy_id_match:
-            pharmacy_id = pharmacy_id_match.group(1)
-            logger.info(f"Redirected directly to pharmacy: {pharmacy_id}")
-            return [pharmacy_id]
-        
-        # Second approach - try to get results from the search page
+
+        # Use the correct search URL based on your information
+        search_url = f"https://www.pharmdata.co.uk/search.php?query={postcode.replace(' ', '%20')}"
+        logger.info(f"Using search URL: {search_url}")
+        driver.get(search_url)
+        time.sleep(3)  # Give time for page to load
+
+        # Check if we have search results
         try:
-            # Look for search results in the page
-            results = []
-            
-            # Try multiple selectors to find result elements
-            result_selectors = [
-                ".tt-suggestion", 
-                ".pharmacy-result", 
-                "table.table tr", 
-                "a[href*='pharmacy']"
-            ]
-            
-            for selector in result_selectors:
-                elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                if elements:
-                    results = elements
-                    logger.info(f"Found {len(results)} results using selector: {selector}")
-                    break
-            
-            # Find pharmacy IDs from results
-            pharmacy_ids = []
-            for result in results[:5]:  # Limit to first 5 results
-                try:
-                    # Check for href attribute - might contain pharmacy ID
-                    href = result.get_attribute("href") or ""
-                    href_match = re.search(r'/pharmacy/([A-Z0-9]+)', href)
-                    if href_match:
-                        pharmacy_ids.append(href_match.group(1))
-                        continue
-                        
-                    # Check for onclick attribute
-                    onclick = result.get_attribute("onclick") or ""
-                    onclick_match = re.search(r'/pharmacy/([A-Z0-9]+)', onclick)
-                    if onclick_match:
-                        pharmacy_ids.append(onclick_match.group(1))
-                        continue
-                    
-                    # Check for ODS code in text content
-                    text = result.text
-                    ods_match = re.search(r'\(([A-Z][A-Z0-9]{4,5})\)', text)
-                    if ods_match:
-                        pharmacy_ids.append(ods_match.group(1))
-                        continue
-                except Exception as e:
-                    logger.error(f"Error extracting from result: {e}")
-            
+            # Look for pharmacy codes in the search results
+            # Pharmacy codes are typically 5-character alphanumeric codes like FQ560
+            page_source = driver.page_source
+            pharmacy_codes = re.findall(r'[A-Z][A-Z0-9]{4}', page_source)
+
+            # Filter unique codes
+            unique_codes = []
+            for code in pharmacy_codes:
+                if code not in unique_codes and len(code) == 5:
+                    unique_codes.append(code)
+
+            # Limit to first 5 unique pharmacy codes
+            pharmacy_ids = unique_codes[:5]
+
             if pharmacy_ids:
-                logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs on search page")
+                logger.info(f"Found {len(pharmacy_ids)} pharmacy codes: {pharmacy_ids}")
                 return pharmacy_ids
-                
+
+            # If no codes found this way, try a different approach
+            logger.info("No pharmacy codes found in page source, trying row search")
+
+            # Look for rows that might contain pharmacy data
+            rows = driver.find_elements(By.CSS_SELECTOR, "tr, .result-row, .pharmacy-row")
+            logger.info(f"Found {len(rows)} potential result rows")
+
+            pharmacy_ids = []
+            for row in rows[:10]:  # Check first 10 rows
+                try:
+                    row_text = row.text
+                    # Look for patterns that match pharmacy codes
+                    codes = re.findall(r'[A-Z][A-Z0-9]{4}', row_text)
+                    for code in codes:
+                        if code not in pharmacy_ids:
+                            pharmacy_ids.append(code)
+                except Exception as e:
+                    logger.error(f"Error extracting from row: {e}")
+
+            # Limit to 5 pharmacies
+            pharmacy_ids = pharmacy_ids[:5]
+
+            if pharmacy_ids:
+                logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs from rows: {pharmacy_ids}")
+                return pharmacy_ids
+
         except Exception as e:
             logger.warning(f"Error extracting search results: {e}")
-        
-        # Third approach - use bloodhound API directly
+
+        # If no results found with direct methods, try looking at links and anchor tags
         try:
-            logger.info("Trying bloodhound API search")
-            driver.get(f"https://www.pharmdata.co.uk/bloodhound.php?q={postcode.replace(' ', '+')}")
-            
-            # Check if result is JSON
-            try:
-                body_text = driver.find_element(By.TAG_NAME, "body").text
-                if body_text.startswith("[") and "]" in body_text:
-                    # Parse JSON
-                    data = json.loads(body_text)
-                    
-                    # Find pharmacy entries
-                    pharmacy_ids = []
-                    for item in data:
-                        if isinstance(item, dict) and ('type' in item and item['type'] == 'pharmacy'):
-                            if 'nacs' in item:
-                                pharmacy_ids.append(item['nacs'])
-                            elif 'id' in item:
-                                pharmacy_ids.append(item['id'])
-                    
-                    if pharmacy_ids:
-                        logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs from API")
-                        return pharmacy_ids
-            except Exception as e:
-                logger.warning(f"Failed to parse API response: {e}")
-        except Exception as e:
-            logger.warning(f"API search failed: {e}")
-        
-        # Fourth approach - try a hardcoded search with the site's search input
-        try:
-            logger.info("Trying manual search with postcode")
-            driver.get("https://www.pharmdata.co.uk")
-            
-            # Wait for page to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            # Find search input - try multiple possible selectors
-            search_input = None
-            for selector in [
-                "input.typeahead",
-                "#pharmdata-search input",
-                "input[type='search']",
-                "input[name='q']"
-            ]:
+            logger.info("Trying to find pharmacy codes in links")
+            links = driver.find_elements(By.TAG_NAME, "a")
+            logger.info(f"Found {len(links)} links on page")
+
+            pharmacy_ids = []
+            for link in links:
                 try:
-                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements:
-                        search_input = elements[0]
-                        logger.info(f"Found search input with selector: {selector}")
-                        break
+                    href = link.get_attribute("href") or ""
+                    # Check for nacs_select.php links which indicate pharmacy
+                    if "nacs_select.php?query=" in href:
+                        pharmacy_id = href.split("nacs_select.php?query=")[1]
+                        if pharmacy_id and pharmacy_id not in pharmacy_ids:
+                            pharmacy_ids.append(pharmacy_id)
+
+                    # Also check for pharmacy codes in link text
+                    link_text = link.text
+                    codes = re.findall(r'[A-Z][A-Z0-9]{4}', link_text)
+                    for code in codes:
+                        if code not in pharmacy_ids:
+                            pharmacy_ids.append(code)
                 except:
                     pass
-            
-            if not search_input:
-                logger.warning("Could not find search input")
-                return []
-            
-            # Enter postcode and submit
-            search_input.clear()
-            search_input.send_keys(postcode)
-            search_input.send_keys(Keys.RETURN)
-            
-            # Wait for results
-            time.sleep(3)
-            
-            # Check if we've been redirected to a pharmacy page
-            current_url = driver.current_url
-            pharmacy_id_match = re.search(r'/pharmacy/([A-Z0-9]+)', current_url)
-            if pharmacy_id_match:
-                pharmacy_id = pharmacy_id_match.group(1)
-                logger.info(f"Redirected to pharmacy: {pharmacy_id}")
-                return [pharmacy_id]
-                
-            # Otherwise, look for pharmacy links on the page
-            pharmacy_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/pharmacy/']")
-            
-            if pharmacy_links:
-                pharmacy_ids = []
-                for link in pharmacy_links[:5]:
-                    href = link.get_attribute("href") or ""
-                    match = re.search(r'/pharmacy/([A-Z0-9]+)', href)
-                    if match:
-                        pharmacy_ids.append(match.group(1))
-                
-                if pharmacy_ids:
-                    logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs from links")
-                    return pharmacy_ids
-        
+
+            # Limit to 5 pharmacies
+            pharmacy_ids = pharmacy_ids[:5]
+
+            if pharmacy_ids:
+                logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs from links: {pharmacy_ids}")
+                return pharmacy_ids
+
         except Exception as e:
-            logger.warning(f"Manual search failed: {e}")
-        
+            logger.warning(f"Error extracting from links: {e}")
+
+        # If all else fails, just look for 5-character codes in the entire page text
+        try:
+            logger.info("Trying to find pharmacy codes in full page text")
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+
+            # Advanced regex to find pharmacy codes but avoid false positives
+            # Looking for codes that appear after "Code:" or in parentheses
+            codes_with_context = re.findall(r'(?:Code:?\s*|ODS:?\s*|\()([A-Z][A-Z0-9]{4})(?:\)|\s|$)', page_text)
+            if codes_with_context:
+                pharmacy_ids = codes_with_context[:5]
+                logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs from context: {pharmacy_ids}")
+                return pharmacy_ids
+
+            # As a last resort, just find all 5-character codes
+            all_codes = re.findall(r'[A-Z][A-Z0-9]{4}', page_text)
+            unique_codes = []
+            for code in all_codes:
+                if code not in unique_codes and len(code) == 5:
+                    unique_codes.append(code)
+
+            if unique_codes:
+                pharmacy_ids = unique_codes[:5]
+                logger.info(f"Found {len(pharmacy_ids)} pharmacy IDs from full text: {pharmacy_ids}")
+                return pharmacy_ids
+
+        except Exception as e:
+            logger.warning(f"Error extracting from full text: {e}")
+
         # If we get here, all search attempts failed
         logger.warning(f"All search attempts failed for postcode: {postcode}")
         return []
-        
+
     except Exception as e:
         logger.error(f"Fatal error in search_pharmacies: {e}")
         return []
@@ -255,150 +211,143 @@ def search_pharmacies(postcode):
             pass
 
 def get_pharmacy_details(pharmacy_id):
-    """Get details for a specific pharmacy"""
+    """Get details for a specific pharmacy using the correct nacs_select.php URL"""
     logger.info(f"Getting details for pharmacy ID: {pharmacy_id}")
     options = setup_chrome()
-    
+
     try:
         driver = webdriver.Chrome(options=options)
-        
-        # Try both possible URL formats
-        urls = [
-            f"https://www.pharmdata.co.uk/pharmacy/{pharmacy_id}",
-            f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
-        ]
-        
-        loaded = False
-        for url in urls:
-            try:
-                logger.info(f"Trying URL: {url}")
-                driver.get(url)
-                time.sleep(2)  # Wait for page to load
-                
-                # Check if page loaded successfully (contains pharmacy data)
-                page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-                if "not found" in page_text or "error" in page_text or "no results" in page_text:
-                    logger.warning(f"Page error or no results at {url}")
-                    continue
-                
-                # If we see pharmacy-related terms, consider it loaded
-                if "pharmacy" in page_text or "dispensing" in page_text or "prescriptions" in page_text:
-                    loaded = True
-                    logger.info(f"Successfully loaded pharmacy page at {url}")
-                    break
-            except Exception as e:
-                logger.warning(f"Error loading {url}: {e}")
-        
-        if not loaded:
-            logger.error(f"Could not load pharmacy page for ID: {pharmacy_id}")
+
+        # Use the correct URL format for pharmacy details
+        url = f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}"
+
+        logger.info(f"Loading pharmacy details from: {url}")
+        driver.get(url)
+        time.sleep(3)  # Give time for page to load
+
+        # Check if page loaded successfully
+        page_source = driver.page_source
+        if "not found" in page_source.lower() or "no results" in page_source.lower():
+            logger.warning(f"Pharmacy not found: {pharmacy_id}")
             return None
-        
-        # Extract pharmacy data
+
         try:
-            # 1. Try to get pharmacy name
-            name_selectors = [
-                "h1", "h2.pharmacy-name", ".pharmacy-name", ".pharmacy-title", 
-                ".panel-title", ".header-title"
-            ]
-            
-            pharmacy_name = "Unknown Pharmacy"
-            for selector in name_selectors:
-                elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                if elements and elements[0].text.strip():
-                    pharmacy_name = elements[0].text.strip()
-                    # Clean up name (remove codes in parentheses if present)
-                    pharmacy_name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', pharmacy_name)
-                    logger.info(f"Found pharmacy name: {pharmacy_name}")
-                    break
-            
-            # 2. Try to get postcode
-            address_selectors = [
-                ".address", "address", ".pharmacy-address", ".panel-body"
-            ]
-            
-            postcode = "N/A"
-            for selector in address_selectors:
-                elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                if elements:
-                    address_text = elements[0].text
-                    uk_postcode_pattern = r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b'
-                    match = re.search(uk_postcode_pattern, address_text)
-                    if match:
-                        postcode = match.group(0)
-                        logger.info(f"Found postcode: {postcode}")
-                        break
-            
-            # If still no postcode, try the whole page
-            if postcode == "N/A":
-                page_text = driver.find_element(By.TAG_NAME, "body").text
-                uk_postcode_pattern = r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b'
-                match = re.search(uk_postcode_pattern, page_text)
-                if match:
-                    postcode = match.group(0)
-            
-            # 3. Extract pharmacy metrics
+            # 1. Get pharmacy name - using panel-title-custom class from your example
+            try:
+                name_element = driver.find_element(By.CSS_SELECTOR, ".panel-title-custom")
+                pharmacy_name = name_element.text.strip()
+
+                # Clean up name (remove codes in parentheses if present)
+                pharmacy_name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', pharmacy_name)
+                logger.info(f"Found pharmacy name: {pharmacy_name}")
+            except:
+                # Try alternative selectors if panel-title-custom not found
+                for selector in ["h1", "h2", ".pharmacy-name", ".panel-title"]:
+                    try:
+                        elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                        if elements and elements[0].text.strip():
+                            pharmacy_name = elements[0].text.strip()
+                            pharmacy_name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', pharmacy_name)
+                            break
+                    except:
+                        pass
+                else:
+                    pharmacy_name = "Unknown Pharmacy"
+
+            # 2. Get postcode - using regex on page text
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            uk_postcode_pattern = r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b'
+            postcode_match = re.search(uk_postcode_pattern, page_text)
+            postcode = postcode_match.group(0) if postcode_match else "N/A"
+            logger.info(f"Found postcode: {postcode}")
+
+            # 3. Get metrics - specifically using the list-group-item-text class from your example
             metrics = {}
-            
-            # Find all elements that might contain metrics
-            metric_elements = []
-            metric_selectors = [
-                ".list-group-item", ".data-item", ".metric", ".stat-item",
-                ".card", "table td", ".panel-body div"
-            ]
-            
-            for selector in metric_selectors:
-                elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                metric_elements.extend(elements)
-            
-            logger.info(f"Found {len(metric_elements)} potential metric elements")
-            
-            # Try to identify metrics by keywords in the text
-            items_value = forms_value = cpcs_value = pharmacy_first_value = nms_value = eps_takeup = "N/A"
-            
-            for element in metric_elements:
-                try:
-                    text = element.text.lower().strip()
-                    if not text:
-                        continue
-                    
-                    # Items dispensed
-                    if "item" in text and not "items_value" in locals():
-                        match = re.search(r'(\d[\d,\.]+)', text)
-                        if match:
-                            items_value = match.group(1)
-                    
-                    # Forms/prescriptions
-                    if ("form" in text or "prescription" in text) and not "forms_value" in locals():
-                        match = re.search(r'(\d[\d,\.]+)', text)
-                        if match:
-                            forms_value = match.group(1)
-                    
-                    # CPCS
-                    if "cpcs" in text and not "cpcs_value" in locals():
-                        match = re.search(r'(\d[\d,\.]+)', text)
-                        if match:
-                            cpcs_value = match.group(1)
-                    
-                    # Pharmacy First
-                    if "pharmacy first" in text and not "pharmacy_first_value" in locals():
-                        match = re.search(r'(\d[\d,\.]+)', text)
-                        if match:
-                            pharmacy_first_value = match.group(1)
-                    
-                    # NMS
-                    if "nms" in text and not "nms_value" in locals():
-                        match = re.search(r'(\d[\d,\.]+)', text)
-                        if match:
-                            nms_value = match.group(1)
-                    
-                    # EPS
-                    if "eps" in text and not "eps_takeup" in locals():
-                        match = re.search(r'(\d[\d,\.]+)\s*%', text)
-                        if match:
-                            eps_takeup = match.group(0)
-                except:
-                    continue
-            
+
+            # Try to find the list-group-item-text elements which contain metrics
+            try:
+                metric_elements = driver.find_elements(By.CSS_SELECTOR, ".list-group-item-text")
+                logger.info(f"Found {len(metric_elements)} metrics using list-group-item-text class")
+
+                # Extract metrics based on position as shown in your example
+                if len(metric_elements) >= 6:
+                    # Items value (first element)
+                    items_text = metric_elements[0].text
+                    items_match = re.search(r'(\d[\d,\.]+)', items_text)
+                    items_value = items_match.group(1) if items_match else "N/A"
+
+                    # Forms value (second element)
+                    forms_text = metric_elements[1].text
+                    forms_match = re.search(r'(\d[\d,\.]+)', forms_text)
+                    forms_value = forms_match.group(1) if forms_match else "N/A"
+
+                    # CPCS value (third element)
+                    cpcs_text = metric_elements[2].text
+                    cpcs_match = re.search(r'(\d[\d,\.]+)', cpcs_text)
+                    cpcs_value = cpcs_match.group(1) if cpcs_match else "N/A"
+
+                    # Pharmacy First value (fourth element)
+                    pf_text = metric_elements[3].text
+                    pf_match = re.search(r'(\d[\d,\.]+)', pf_text)
+                    pharmacy_first_value = pf_match.group(1) if pf_match else "N/A"
+
+                    # NMS value (fifth element)
+                    nms_text = metric_elements[4].text
+                    nms_match = re.search(r'(\d[\d,\.]+)', nms_text)
+                    nms_value = nms_match.group(1) if nms_match else "N/A"
+
+                    # EPS value (sixth element)
+                    eps_text = metric_elements[5].text
+                    eps_match = re.search(r'(\d+)%', eps_text)
+                    eps_takeup = eps_match.group(0) if eps_match else "N/A"
+
+                    logger.info("Successfully extracted metrics from list-group-item-text elements")
+                else:
+                    logger.warning("Not enough list-group-item-text elements found")
+                    items_value = forms_value = cpcs_value = pharmacy_first_value = nms_value = eps_takeup = "N/A"
+            except Exception as e:
+                logger.warning(f"Error extracting metrics from list-group-item-text: {e}")
+                items_value = forms_value = cpcs_value = pharmacy_first_value = nms_value = eps_takeup = "N/A"
+
+            # If any metric is still N/A, try looking for class names with ks- prefix (from your example)
+            try:
+                if items_value == "N/A":
+                    items_element = driver.find_element(By.CSS_SELECTOR, ".ks-items")
+                    items_text = items_element.text
+                    items_match = re.search(r'(\d[\d,\.]+)', items_text)
+                    if items_match:
+                        items_value = items_match.group(1)
+
+                if forms_value == "N/A":
+                    forms_element = driver.find_element(By.CSS_SELECTOR, ".ks-forms")
+                    forms_text = forms_element.text
+                    forms_match = re.search(r'(\d[\d,\.]+)', forms_text)
+                    if forms_match:
+                        forms_value = forms_match.group(1)
+
+                if cpcs_value == "N/A":
+                    cpcs_element = driver.find_element(By.CSS_SELECTOR, ".ks-cpcs")
+                    cpcs_text = cpcs_element.text
+                    cpcs_match = re.search(r'(\d[\d,\.]+)', cpcs_text)
+                    if cpcs_match:
+                        cpcs_value = cpcs_match.group(1)
+
+                if nms_value == "N/A":
+                    nms_element = driver.find_element(By.CSS_SELECTOR, ".ks-nms")
+                    nms_text = nms_element.text
+                    nms_match = re.search(r'(\d[\d,\.]+)', nms_text)
+                    if nms_match:
+                        nms_value = nms_match.group(1)
+
+                if eps_takeup == "N/A":
+                    eps_element = driver.find_element(By.CSS_SELECTOR, ".ks-eps")
+                    eps_text = eps_element.text
+                    eps_match = re.search(r'(\d+)%', eps_text)
+                    if eps_match:
+                        eps_takeup = eps_match.group(0)
+            except Exception as e:
+                logger.warning(f"Error extracting metrics from ks- classes: {e}")
+
             # Build pharmacy data object
             pharmacy_data = {
                 'name': pharmacy_name,
@@ -410,14 +359,41 @@ def get_pharmacy_details(pharmacy_id):
                 'nms': nms_value,
                 'eps': eps_takeup
             }
-            
+
             logger.info(f"Extracted pharmacy data: {pharmacy_data}")
             return pharmacy_data
-            
+
         except Exception as e:
             logger.error(f"Error extracting pharmacy details: {e}")
-            return None
-            
+
+            # Try a simple fallback approach - just get the name and postcode
+            try:
+                # Get page text for simple extraction
+                page_text = driver.find_element(By.TAG_NAME, "body").text
+
+                # Try to find pharmacy name
+                name_match = re.search(r'([A-Za-z0-9\s&]+\bPharmacy\b|Boots|Lloyds\s+Pharmacy)', page_text)
+                pharmacy_name = name_match.group(0) if name_match else "Unknown Pharmacy"
+
+                # Try to find postcode
+                uk_postcode_pattern = r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b'
+                postcode_match = re.search(uk_postcode_pattern, page_text)
+                postcode = postcode_match.group(0) if postcode_match else "N/A"
+
+                # Return minimal data
+                return {
+                    'name': pharmacy_name,
+                    'postcode': postcode,
+                    'items': "N/A",
+                    'forms': "N/A",
+                    'cpcs': "N/A",
+                    'pharmacy_first': "N/A",
+                    'nms': "N/A",
+                    'eps': "N/A"
+                }
+            except:
+                return None
+
     except Exception as e:
         logger.error(f"Error getting pharmacy details: {e}")
         return None
