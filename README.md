@@ -116,4 +116,7 @@ If the webhook isn't receiving messages:
 
 1. Confirm that `APP_NAME` is set correctly and matches your Heroku app name exactly
 2. Check the logs for successful webhook registration
-3. Test the bot in polling mode locally to confirm basic functionality
+3. Make sure `python-telegram-bot[webhooks]` is installed correctly
+4. Test the bot in polling mode locally to confirm basic functionality
+
+Note: The Python Telegram Bot library requires the optional webhooks dependency to be installed. This is included in the requirements.txt file as `python-telegram-bot[webhooks]`.
