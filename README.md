@@ -2,6 +2,10 @@
 
 A Telegram bot that fetches UK pharmacy data using web scraping techniques. This bot accepts UK postcodes and returns information about nearby pharmacies including items dispensed, prescriptions, CPCS, Pharmacy First, NMS, and EPS takeup data.
 
+## UPDATE: New Simple Implementation
+
+The bot has been reimplemented in a single `bot.py` file with a more reliable structure for Heroku deployment. This new implementation follows best practices and handles webhooks correctly.
+
 ## Requirements
 
 - Python 3.9+
@@ -54,12 +58,7 @@ pip install -r requirements.txt
 
 3. Run the bot:
 ```
-python run.py
-```
-
-For development and debugging purposes, you can also run the bot directly from the main file:
-```
-RUN_FROM_FILE=true python pharmacy_data.py
+python bot.py
 ```
 
 ## Features
@@ -72,8 +71,8 @@ RUN_FROM_FILE=true python pharmacy_data.py
 
 ## Project Structure
 
-- `pharmacy_data.py` - Main bot code with scraping functions
-- `run.py` - Application entry point that properly handles async execution
+- `bot.py` - Complete bot implementation in a single file (new simplified version)
+- `pharmacy_data.py` - Original bot code (deprecated)
 - `Procfile` - Heroku process definition file (uses web dyno for webhook)
 - `requirements.txt` - Python dependencies
 - `Aptfile` - System dependencies for Chrome and X11 libraries
@@ -117,6 +116,12 @@ If the webhook isn't receiving messages:
 1. Confirm that `APP_NAME` is set correctly and matches your Heroku app name exactly
 2. Check the logs for successful webhook registration
 3. Make sure `python-telegram-bot[webhooks]` is installed correctly
-4. Test the bot in polling mode locally to confirm basic functionality
+4. Use the included `test_webhook.py` script to diagnose webhook issues:
+   ```
+   python test_webhook.py
+   ```
+5. Ensure your Heroku app is properly scaled with `heroku ps:scale web=1`
+6. Check if you're hitting Telegram's rate limits (errors like "429 Too Many Requests")
+7. Test the bot in polling mode locally to confirm basic functionality
 
 Note: The Python Telegram Bot library requires the optional webhooks dependency to be installed. This is included in the requirements.txt file as `python-telegram-bot[webhooks]`.
