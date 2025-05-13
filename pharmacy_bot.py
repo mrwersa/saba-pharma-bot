@@ -202,27 +202,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         # Format and send results
         if results:
-            response = "📊 نتایج (میانگین ۳ ماهه اخیر) 📊\n"
-            
+            response = "📊 Results (3-Month Averages) 📊\n"
+
             for pharmacy in results:
                 response += (
-                    f"\n🏥 داروخانه: {pharmacy['name']} ({pharmacy['postcode']})\n"
-                    f"📦 اقلام توزیع شده: {pharmacy['items']}\n"
-                    f"📝 نسخه ها: {pharmacy['forms']}\n"
+                    f"\n🏥 Pharmacy: {pharmacy['name']} ({pharmacy['postcode']})\n"
+                    f"📦 Items Dispensed: {pharmacy['items']}\n"
+                    f"📝 Prescriptions: {pharmacy['forms']}\n"
                     f"🩺 CPCS: {pharmacy['cpcs']}\n"
                     f"💊 Pharmacy First: {pharmacy['pharmacy_first']}\n"
                     f"🔄 NMS: {pharmacy['nms']}\n"
                     f"💻 EPS Takeup: {pharmacy['eps']}\n"
                 )
-                
+
             # Delete status message and send results
             await status_msg.delete()
             await update.message.reply_text(response)
         else:
-            await status_msg.edit_text("متاسفانه نتوانستم اطلاعات داروخانه ها را دریافت کنم.")
+            await status_msg.edit_text("Sorry, I couldn't retrieve information about the pharmacies.")
     except Exception as e:
         logger.error(f"Error handling message: {e}")
-        await update.message.reply_text("مشکلی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید.")
+        await update.message.reply_text("An error occurred while processing your request. Please try again.")
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     """Log errors caused by updates"""
