@@ -28,6 +28,8 @@ heroku config:set TELEGRAM_BOT_TOKEN=your_telegram_bot_token --app saba-pharma-b
 heroku config:set APP_NAME=saba-pharma-bot --app saba-pharma-bot
 ```
 
+Note: The `APP_NAME` must match your Heroku app name exactly for webhooks to work properly.
+
 4. Deploy the app:
 ```
 git push heroku main
@@ -66,10 +68,12 @@ python pharmacy_data.py
 ## Project Structure
 
 - `pharmacy_data.py` - Main bot code with scraping functions
+- `run.py` - Application entry point that properly handles async execution
 - `Procfile` - Heroku process definition file (uses web dyno for webhook)
 - `requirements.txt` - Python dependencies
-- `Aptfile` - System dependencies for Chrome
+- `Aptfile` - System dependencies for Chrome and X11 libraries
 - `runtime.txt` - Python runtime version
+- `.gitignore` - Files and directories to exclude from git
 
 ## Web vs Worker Dynos
 
