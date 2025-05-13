@@ -667,11 +667,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pharmacy = await asyncio.to_thread(get_pharmacy_details, pharmacy_id)
 
                 if pharmacy:
-                    # Format the single pharmacy result - check if it's Boots
-                    if "Boots" in pharmacy['name']:
-                        response = "📊 Boots Pharmacy Information 📊\n"
-                    else:
-                        response = "📊 Pharmacy Information 📊\n"
+                    # Use standard title for pharmacy results
+                    response = "📊 Pharmacy Information 📊\n"
 
                     # No separator needed for single result
                     response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
@@ -784,15 +781,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
             
-        # Looking specifically for Boots
-        await status_msg.edit_text(f"🏥 Looking for Boots pharmacy in {postcode}...")
+        # Looking for pharmacies
+        await status_msg.edit_text(f"🏥 Looking for pharmacies in {postcode}...")
 
-        # Get details for each pharmacy concurrently, filter for Boots only
+        # Get details for each pharmacy concurrently
         results = []
         tasks = []
 
         # Create tasks for all pharmacy details
-        for pharmacy_id in pharmacy_ids[:5]:  # Check more to increase chance of finding Boots
+        for pharmacy_id in pharmacy_ids[:5]:  # Limit to 5 pharmacies
             tasks.append(
                 asyncio.create_task(
                     asyncio.to_thread(get_pharmacy_details, pharmacy_id)
@@ -802,23 +799,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Wait for all tasks to complete
         try:
             # Process completed tasks as they finish
-            boots_found = False
             for completed_task in asyncio.as_completed(tasks, timeout=30):
                 pharmacy = await completed_task
                 if pharmacy:
-                    # Only include Boots pharmacies
-                    if "Boots" in pharmacy["name"]:
-                        results = [pharmacy]  # Only keep the Boots result
-                        boots_found = True
-                        # Update status message
-                        await status_msg.edit_text(f"Found Boots pharmacy! Getting details...")
-                        break  # Stop after finding Boots
+                    results.append(pharmacy)
+                    # Update status message with current count
+                    if len(results) == 1:
+                        await status_msg.edit_text(f"Found 1 pharmacy, searching for more...")
                     else:
-                        # Store result only if we don't have Boots yet
-                        if not boots_found:
-                            results.append(pharmacy)
-                    # Update status message without showing numbers
-                    await status_msg.edit_text(f"Searching for Boots pharmacy...")
+                        await status_msg.edit_text(f"Found {len(results)} pharmacies, searching for more...")
         except asyncio.TimeoutError:
             logger.warning("Timeout getting pharmacy details")
             # Continue with any results we got
@@ -829,35 +818,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Error processing pharmacy details: {e}")
             # Continue with any results we got
 
-        # Final filtering - ensure we only show a Boots pharmacy if available
-        boots_results = [p for p in results if "Boots" in p["name"]]
-        if boots_results:
-            # If we have any Boots pharmacies, only show those
-            results = boots_results[:1]  # Just the first Boots
-        elif len(results) > 0:
-            # If no Boots found, just keep first result
-            results = [results[0]]
-
-        # Update header message based on whether we found Boots
-        if results and "Boots" in results[0]["name"]:
-            boots_found = True
-        else:
-            boots_found = False
-
-        # Format and send results
+        # Prioritize Boots pharmacies in results
         if results:
-            # Use appropriate title based on whether we found Boots
-            if boots_found:
-                response = "📊 Boots Pharmacy Information 📊\n"
-            else:
-                response = "📊 Pharmacy Information 📊\n"
+            # Sort results to show Boots pharmacies first, then alphabetically
+            results = sorted(results, key=lambda p: (0 if "Boots" in p.get('name', '') else 1, p.get('name', '')))
 
-            for i, pharmacy in enumerate(results):
-                # Add separator line between pharmacies (except for the first one)
-                if i > 0:
-                    response += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        # Format and send each pharmacy as a separate message
+        if results:
+            # Delete status message before sending results
+            await status_msg.delete()
 
-                response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
+            # Send each pharmacy as a separate message
+            for pharmacy in results:
+                # Create individual response for this pharmacy
+                response = "📊 Pharmacy Information 📊\n\n"
+
+                response += f"🏥 Pharmacy: {pharmacy['name']}\n"
 
                 # Add address if available
                 if 'address' in pharmacy and pharmacy['address'] != "Address not found":
@@ -878,9 +854,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response += f"🔄 NMS: {pharmacy['nms']}\n"
                 response += f"💻 EPS Takeup: {pharmacy['eps']}\n"
 
-            # Delete status message and send results
-            await status_msg.delete()
-            await update.message.reply_text(response)
+                # Send this pharmacy's message
+                await update.message.reply_text(response)
         else:
             await status_msg.edit_text("Sorry, I couldn't retrieve information about the pharmacies.")
     except Exception as e:
