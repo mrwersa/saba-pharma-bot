@@ -65,29 +65,53 @@ def search_pharmacies(postcode):
     """Search for pharmacies by postcode"""
     logger.info(f"Searching for pharmacies with postcode: {postcode}")
     options = setup_chrome()
-    
+
     try:
         driver = webdriver.Chrome(options=options)
         driver.get("https://www.pharmdata.co.uk")
-        
+        logger.info("Loaded PharmData website")
+
         # Wait for search box and enter postcode
         search_box = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.NAME, 'query'))
+            EC.presence_of_element_located((By.NAME, 'q'))  # FIXED: Changed from 'query' to 'q'
         )
+        logger.info("Found search box")
         search_box.clear()
         search_box.send_keys(postcode)
         search_box.send_keys(Keys.RETURN)
-        
-        # Get search results
+        logger.info("Submitted search")
+
+        # Get search results - wait for the table to load
+        driver.implicitly_wait(5)  # Give page time to load
+
+        # Look for result table rows
         search_results = WebDriverWait(driver, 15).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'tr.search-result'))
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'table.table tbody tr'))  # FIXED: target the actual table rows
         )
-        
+
+        logger.info(f"Found {len(search_results)} search results")
+
         # Extract pharmacy IDs
-        pharmacy_ids = [
-            result.get_attribute('id') for result in search_results[:5] if result.get_attribute('id')
-        ]
-        
+        pharmacy_ids = []
+        for result in search_results[:5]:
+            try:
+                # Get the onclick attribute which contains the pharmacy ID
+                onclick = result.get_attribute('onclick')
+                if onclick:
+                    # Extract pharmacy ID from the onclick JavaScript
+                    match = re.search(r"window\.location='.*query=([^']+)'", onclick)
+                    if match:
+                        pharmacy_id = match.group(1)
+                        pharmacy_ids.append(pharmacy_id)
+                        logger.info(f"Found pharmacy ID: {pharmacy_id}")
+            except Exception as e:
+                logger.error(f"Error extracting pharmacy ID: {e}")
+
+        if not pharmacy_ids:
+            logger.warning("No pharmacy IDs found in search results")
+        else:
+            logger.info(f"Returning {len(pharmacy_ids)} pharmacy IDs")
+
         return pharmacy_ids
     except Exception as e:
         logger.error(f"Error searching pharmacies: {e}")
@@ -99,46 +123,116 @@ def get_pharmacy_details(pharmacy_id):
     """Get details for a specific pharmacy"""
     logger.info(f"Getting details for pharmacy ID: {pharmacy_id}")
     options = setup_chrome()
-    
+
     try:
         driver = webdriver.Chrome(options=options)
-        driver.get(f"https://www.pharmdata.co.uk/nacs_select.php?query={pharmacy_id}")
-        
-        elements = WebDriverWait(driver, 15).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.list-group-item-text'))
-        )
-        
-        if len(elements) < 6:
-            logger.warning(f"Insufficient data fields for pharmacy {pharmacy_id}")
+        # FIXED: Updated URL to match the correct format
+        driver.get(f"https://www.pharmdata.co.uk/pharmacy/{pharmacy_id}")
+        logger.info(f"Loaded pharmacy details page for ID: {pharmacy_id}")
+
+        # Wait for main data to load
+        try:
+            # Find the key pharmacy data in the page
+            pharmacy_container = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, '.pharmacy-container, .container'))
+            )
+            logger.info("Found pharmacy data container")
+
+            # Extract pharmacy name and address
+            try:
+                name_element = driver.find_element(By.CSS_SELECTOR, 'h2.pharmacy-name, h1, .header-title')
+                pharmacy_name = name_element.text.strip()
+                logger.info(f"Found pharmacy name: {pharmacy_name}")
+            except:
+                pharmacy_name = "Unknown Pharmacy"
+                logger.warning("Could not find pharmacy name")
+
+            # Extract address and postcode
+            try:
+                address_elements = driver.find_elements(By.CSS_SELECTOR, '.pharmacy-address, address, .address')
+                if address_elements:
+                    address_text = address_elements[0].text
+                else:
+                    # Try getting all text and finding postcode
+                    address_text = pharmacy_container.text
+
+                postcode_match = re.search(r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b', address_text)
+                postcode = postcode_match.group(0) if postcode_match else "N/A"
+                logger.info(f"Found postcode: {postcode}")
+            except Exception as e:
+                postcode = "N/A"
+                logger.warning(f"Could not extract postcode: {e}")
+
+            # Extract pharmacy statistics - more resilient approach
+            try:
+                # Get all stat elements that might contain our data
+                stat_elements = driver.find_elements(By.CSS_SELECTOR, '.stat-box, .data-box, .metric, .pharmacy-metric, .list-group-item')
+                logger.info(f"Found {len(stat_elements)} potential stat elements")
+
+                # Default values
+                items_value = "N/A"
+                forms_value = "N/A"
+                cpcs_value = "N/A"
+                pharmacy_first_value = "N/A"
+                nms_value = "N/A"
+                eps_takeup = "N/A"
+
+                # Extract from elements by looking for keywords in the text
+                for element in stat_elements:
+                    element_text = element.text.lower()
+
+                    if 'items' in element_text:
+                        items_match = re.search(r'(\d[\d,]*)', element_text)
+                        if items_match:
+                            items_value = items_match.group(1)
+
+                    if 'form' in element_text or 'prescription' in element_text:
+                        forms_match = re.search(r'(\d[\d,]*)', element_text)
+                        if forms_match:
+                            forms_value = forms_match.group(1)
+
+                    if 'cpcs' in element_text:
+                        cpcs_match = re.search(r'(\d[\d,]*)', element_text)
+                        if cpcs_match:
+                            cpcs_value = cpcs_match.group(1)
+
+                    if 'pharmacy first' in element_text:
+                        pf_match = re.search(r'(\d[\d,]*)', element_text)
+                        if pf_match:
+                            pharmacy_first_value = pf_match.group(1)
+
+                    if 'nms' in element_text:
+                        nms_match = re.search(r'(\d[\d,]*)', element_text)
+                        if nms_match:
+                            nms_value = nms_match.group(1)
+
+                    if 'eps' in element_text:
+                        eps_match = re.search(r'(\d+)%', element_text)
+                        if eps_match:
+                            eps_takeup = eps_match.group(0)
+
+            except Exception as e:
+                logger.error(f"Error extracting pharmacy stats: {e}")
+
+            # Build and return the pharmacy data
+            pharmacy_data = {
+                'name': pharmacy_name,
+                'postcode': postcode,
+                'items': items_value,
+                'forms': forms_value,
+                'cpcs': cpcs_value,
+                'pharmacy_first': pharmacy_first_value,
+                'nms': nms_value,
+                'eps': eps_takeup
+            }
+
+            logger.info(f"Successfully extracted pharmacy details: {pharmacy_data}")
+            return pharmacy_data
+
+        except Exception as e:
+            logger.error(f"Error finding pharmacy data container: {e}")
             return None
-            
-        items_value = elements[0].text.split()[0]
-        forms_value = elements[1].text.split()[0]
-        cpcs_value = elements[2].text.split()[0]
-        pharmacy_first_value = elements[3].text.split()[0]
-        nms_value = elements[4].text.split()[0]
-        eps_text = elements[5].text
-        eps_takeup_percentage = eps_text.split('%')[0].strip() + '%'
-        
-        name_element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, '.panel-title-custom'))
-        )
-        pharmacy_name = name_element.text.split('(')[0].strip()
-        
-        address_text = driver.find_element(By.XPATH, "//div[contains(@class, 'col-md-3')]").text
-        postcode_match = re.search(r'\b[A-Z]{1,2}\d[A-Z]?\s*\d[A-Z]{2}\b', address_text)
-        postcode = postcode_match.group(0) if postcode_match else "N/A"
-        
-        return {
-            'name': pharmacy_name,
-            'postcode': postcode,
-            'items': items_value,
-            'forms': forms_value,
-            'cpcs': cpcs_value,
-            'pharmacy_first': pharmacy_first_value,
-            'nms': nms_value,
-            'eps': eps_takeup_percentage
-        }
+
     except Exception as e:
         logger.error(f"Error getting pharmacy details: {e}")
         return None
