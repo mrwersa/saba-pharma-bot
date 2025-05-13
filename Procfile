@@ -1,1 +1,1 @@
-web: python minimal_bot.py
+worker: python pharmacy_bot.py
