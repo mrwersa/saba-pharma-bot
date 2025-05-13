@@ -280,7 +280,8 @@ async def telegram_bot_main():
         await application.run_webhook(
             listen="0.0.0.0",
             port=port,
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
+            allowed_updates=["message"]
         )
     else:
         logging.info("Starting polling")
@@ -320,10 +321,10 @@ if __name__ == "__main__":
         logging.error(f"Chrome initialization test failed: {e}")
 
     # Run the bot
-    loop = asyncio.get_event_loop()
     try:
         logging.info("Starting Telegram bot...")
-        loop.run_until_complete(telegram_bot_main())
+        # Use asyncio.run which properly manages the event loop
+        asyncio.run(telegram_bot_main())
     except (KeyboardInterrupt, SystemExit):
         logging.info("Bot stopped by user.")
     except Exception as e:
