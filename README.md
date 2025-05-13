@@ -33,9 +33,9 @@ heroku config:set APP_NAME=saba-pharma-bot --app saba-pharma-bot
 git push heroku main
 ```
 
-5. Scale the worker dyno:
+5. Ensure the web dyno is running:
 ```
-heroku ps:scale worker=1 --app saba-pharma-bot
+heroku ps:scale web=1 --app saba-pharma-bot
 ```
 
 ## Local Development
@@ -66,7 +66,19 @@ python pharmacy_data.py
 ## Project Structure
 
 - `pharmacy_data.py` - Main bot code with scraping functions
-- `Procfile` - Heroku process definition file
+- `Procfile` - Heroku process definition file (uses web dyno for webhook)
 - `requirements.txt` - Python dependencies
 - `Aptfile` - System dependencies for Chrome
 - `runtime.txt` - Python runtime version
+
+## Web vs Worker Dynos
+
+This bot uses a **web** dyno instead of a worker dyno because:
+
+1. **Webhook Mode** - When a Telegram bot uses webhook mode, it needs to receive HTTP requests from Telegram's servers. Only web dynos can receive incoming HTTP requests in Heroku.
+
+2. **Port Binding** - Web dynos bind to a port (provided by Heroku as the PORT environment variable) and can accept incoming connections, which is essential for webhooks.
+
+3. **Always On** - Both web and worker dynos can run continuously, but only web dynos can respond to HTTP requests from external services.
+
+If you were to use polling mode instead of webhook mode, you would use a worker dyno because polling doesn't require accepting incoming HTTP connections.
