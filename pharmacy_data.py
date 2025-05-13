@@ -190,11 +190,20 @@ def scrape_items_and_forms_selenium(pharmacy_id):
 
 # Telegram bot command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('سلام عزیزم! من ربات اطلاعات داروخانه هستم. لطفاً یک کد پستی بریتانیا وارد کن')
+    try:
+        logging.info(f"Received /start command from user {update.effective_user.id}")
+        await update.message.reply_text('سلام عزیزم! من ربات اطلاعات داروخانه هستم. لطفاً یک کد پستی بریتانیا وارد کن')
+    except Exception as e:
+        logging.error(f"Error in start command: {e}")
 
 # Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    postcode = update.message.text.strip()
+    try:
+        logging.info(f"Received message from user {update.effective_user.id}: {update.message.text[:15]}...")
+        postcode = update.message.text.strip()
+    except Exception as e:
+        logging.error(f"Error processing message: {e}")
+        return
 
     if not postcode:
         await update.message.reply_text('Please provide a postcode.')
@@ -274,14 +283,23 @@ async def telegram_bot_main():
 
     # Use webhook if on Heroku (APP_NAME is set), otherwise use polling
     if app_name:
-        webhook_url = f"https://{app_name}.herokuapp.com/{bot_token}"
+        # The webhook path needs to be fixed and consistent
+        webhook_path = f"/{bot_token}"
+        webhook_url = f"https://{app_name}.herokuapp.com{webhook_path}"
+
         logging.info(f"Starting webhook on port {port}")
+        logging.info(f"Setting webhook URL: {webhook_url}")
+
+        # Set the webhook
         await application.bot.set_webhook(url=webhook_url)
+
+        # Start the webhook server
         await application.run_webhook(
             listen="0.0.0.0",
             port=port,
-            webhook_url=webhook_url,
-            allowed_updates=["message"],
+            url_path=webhook_path,  # Important: this must match the path in webhook_url
+            webhook_url=None,  # Don't set the webhook again during run_webhook
+            allowed_updates=["message", "callback_query"],
             close_loop=False  # Don't close the loop when done
         )
     else:
