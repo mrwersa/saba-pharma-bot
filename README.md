@@ -2,9 +2,15 @@
 
 A Telegram bot that fetches UK pharmacy data using web scraping techniques. This bot accepts UK postcodes and returns information about nearby pharmacies including items dispensed, prescriptions, CPCS, Pharmacy First, NMS, and EPS takeup data.
 
-## UPDATE: New Simple Implementation
+📱 [Open in Telegram: @saba_pharma_bot](https://t.me/saba_pharma_bot)
 
-The bot has been reimplemented in a single `bot.py` file with a more reliable structure for Heroku deployment. This new implementation follows best practices and handles webhooks correctly.
+## Key Features
+
+- 🔍 **Instant Pharmacy Search**: Find pharmacies near any UK postcode
+- 📊 **Comprehensive Data**: Get detailed dispensing and service information
+- 📈 **3-Month Averages**: View recent performance metrics
+- 💊 **Multiple Services**: CPCS, Pharmacy First, NMS, and EPS statistics
+- 🚀 **Fast Results**: Multiple pharmacy results in seconds
 
 ## Requirements
 
@@ -29,19 +35,16 @@ heroku buildpacks:add --index 3 heroku/python --app saba-pharma-bot
 3. Set the required environment variables:
 ```
 heroku config:set TELEGRAM_BOT_TOKEN=your_telegram_bot_token --app saba-pharma-bot
-heroku config:set APP_NAME=saba-pharma-bot --app saba-pharma-bot
 ```
-
-Note: The `APP_NAME` must match your Heroku app name exactly for webhooks to work properly.
 
 4. Deploy the app:
 ```
 git push heroku main
 ```
 
-5. Ensure the web dyno is running:
+5. Scale the worker dyno:
 ```
-heroku ps:scale web=1 --app saba-pharma-bot
+heroku ps:scale worker=1 --app saba-pharma-bot
 ```
 
 ## Local Development
@@ -58,70 +61,47 @@ pip install -r requirements.txt
 
 3. Run the bot:
 ```
-python bot.py
+python pharmacy_bot.py
 ```
 
-## Features
+## How It Works
 
-- Searches for UK pharmacies by postcode
-- Retrieves detailed pharmacy data from PharmData.co.uk
-- Presents information in an easy-to-read format
-- Works with Telegram's messaging interface
-- Handles errors gracefully with retries
+1. **Enter a UK Postcode**: Send any valid UK postcode to the bot
+2. **Wait for Results**: The bot searches pharmdata.co.uk for matching pharmacies
+3. **View Pharmacy Data**: Receive detailed information about nearby pharmacies
+4. **Compare Statistics**: See dispensing figures and service provision data
 
-## Project Structure
+### Sample Output
 
-- `bot.py` - Complete bot implementation in a single file (new simplified version)
-- `pharmacy_data.py` - Original bot code (deprecated)
-- `Procfile` - Heroku process definition file (uses web dyno for webhook)
-- `requirements.txt` - Python dependencies
-- `Aptfile` - System dependencies for Chrome and X11 libraries
-- `runtime.txt` - Python runtime version
-- `.gitignore` - Files and directories to exclude from git
+```
+📊 Results (3-Month Averages) 📊
 
-## Web vs Worker Dynos
+🏥 Pharmacy: Boots (E1 6AN)
+📦 Items Dispensed: 12,456
+📝 Prescriptions: 4,789
+🩺 CPCS: 321
+💊 Pharmacy First: 156
+🔄 NMS: 89
+💻 EPS Takeup: 93%
 
-This bot uses a **web** dyno instead of a worker dyno because:
+🏥 Pharmacy: Lloyds Pharmacy (E1 7RT)
+📦 Items Dispensed: 9,872
+📝 Prescriptions: 3,456
+🩺 CPCS: 213
+💊 Pharmacy First: 118
+🔄 NMS: 67
+💻 EPS Takeup: 87%
+```
 
-1. **Webhook Mode** - When a Telegram bot uses webhook mode, it needs to receive HTTP requests from Telegram's servers. Only web dynos can receive incoming HTTP requests in Heroku.
+## Important Notes
 
-2. **Port Binding** - Web dynos bind to a port (provided by Heroku as the PORT environment variable) and can accept incoming connections, which is essential for webhooks.
-
-3. **Always On** - Both web and worker dynos can run continuously, but only web dynos can respond to HTTP requests from external services.
-
-If you were to use polling mode instead of webhook mode, you would use a worker dyno because polling doesn't require accepting incoming HTTP connections.
+This bot now uses a **worker** dyno with **polling mode** instead of webhook mode. This approach is more reliable on Heroku, as it doesn't require handling webhook callbacks and avoids complications with HTTPS and event loops.
 
 ## Troubleshooting
 
-### Event Loop Errors
+If you encounter any issues:
 
-If you encounter errors like "Cannot close a running event loop", the bot architecture handles this by:
-
-1. Separating the bot logic (`pharmacy_data.py`) from the entry point (`run.py`)
-2. Using `close_loop=False` in the webhook and polling configurations
-3. Using `asyncio.run()` instead of manually managing event loops
-
-### Chrome/Selenium Issues
-
-If you encounter Chrome or Selenium-related errors:
-
-1. Check if all required X11 libraries are in the `Aptfile`
-2. Verify that the Chrome binary is being found correctly in the logs
-3. Try switching to a different Chrome version or ChromeDriver
-
-### Webhook Issues
-
-If the webhook isn't receiving messages:
-
-1. Confirm that `APP_NAME` is set correctly and matches your Heroku app name exactly
-2. Check the logs for successful webhook registration
-3. Make sure `python-telegram-bot[webhooks]` is installed correctly
-4. Use the included `test_webhook.py` script to diagnose webhook issues:
-   ```
-   python test_webhook.py
-   ```
-5. Ensure your Heroku app is properly scaled with `heroku ps:scale web=1`
-6. Check if you're hitting Telegram's rate limits (errors like "429 Too Many Requests")
-7. Test the bot in polling mode locally to confirm basic functionality
-
-Note: The Python Telegram Bot library requires the optional webhooks dependency to be installed. This is included in the requirements.txt file as `python-telegram-bot[webhooks]`.
+1. Check the logs: `heroku logs --app saba-pharma-bot`
+2. Ensure the worker is running: `heroku ps --app saba-pharma-bot`
+3. Restart the worker if needed: `heroku ps:restart worker --app saba-pharma-bot`
+4. Make sure all buildpacks are properly installed: `heroku buildpacks --app saba-pharma-bot`
