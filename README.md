@@ -1,15 +1,16 @@
 # Saba Pharma Bot
 
-A streamlined Telegram bot that quickly fetches UK pharmacy data, specializing in Boots pharmacies. This bot accepts UK postcodes or direct pharmacy ODS codes and returns information about Boots pharmacies including their services.
+A streamlined Telegram bot that quickly fetches UK pharmacy data from PharmData.co.uk. This bot accepts UK postcodes or direct pharmacy ODS codes and returns detailed information about pharmacies including their services and metrics.
 
 📱 [Open in Telegram: @saba_pharma_bot](https://t.me/saba_pharma_bot)
 
 ## Key Features
 
-- 🔍 **Boots Pharmacy Search**: Find Boots pharmacies near any UK postcode
+- 🔍 **Pharmacy Search**: Find pharmacies near any UK postcode
 - 🏥 **Direct Lookup**: Look up pharmacies by their ODS codes (e.g., FJ144)
-- 💊 **Service Overview**: See what services are available at the pharmacy
-- 📋 **Clean Interface**: Simple and easy-to-read results
+- 💊 **Service Overview**: See what services are available at the pharmacy with metrics
+- 📋 **Clean Interface**: Each pharmacy displayed in a separate message for easy reading
+- 🔗 **Direct Links**: Links to view full pharmacy details on PharmData
 - 🚀 **Parallel Processing**: Uses concurrent tasks for faster results
 - ⏱️ **Timeout Protection**: Optimized for reliable performance on Heroku
 
@@ -74,8 +75,8 @@ python pharmacy_bot.py
 ## How It Works
 
 1. **Enter a UK Postcode**: Send any valid UK postcode to the bot
-2. **Wait for Results**: The bot searches pharmdata.co.uk for Boots pharmacies
-3. **View Pharmacy Services**: Receive information about the Boots pharmacy
+2. **Wait for Results**: The bot searches pharmdata.co.uk for nearby pharmacies
+3. **View Pharmacy Services**: Receive information about multiple pharmacies with their services and metrics
 4. **Direct Lookup**: Alternatively, enter an ODS code (like FJ144) to look up a specific pharmacy
 
 ### Sample Output
@@ -85,13 +86,14 @@ python pharmacy_bot.py
 
 🏥 Pharmacy: Boots
 📮 Postcode: W9 1SY
+🔗 More info: https://www.pharmdata.co.uk/nacs_select.php?query=FJ144
 
-📦 Items Dispensed
-📝 Prescriptions
-🩺 CPCS
-💊 Pharmacy First
-🔄 NMS
-💻 EPS Takeup
+📦 Items Dispensed: 15,234
+📝 Prescriptions: 4,210
+🩺 CPCS: 122
+💊 Pharmacy First: 76
+🔄 NMS: 89
+💻 EPS Takeup: 85%
 ```
 
 ## Important Notes
@@ -100,14 +102,15 @@ This bot now uses a **worker** dyno with **polling mode** instead of webhook mod
 
 ## Performance Optimizations
 
-This bot has been specially optimized for performance:
+This bot has been specially optimized for performance on Heroku:
 
-1. **Concurrent Processing**: Uses asyncio to process pharmacy data in parallel
-2. **Efficient Waiting**: Uses WebDriverWait instead of sleep() for faster page loading
-3. **Timeouts**: Implements proper timeouts to prevent hanging operations
-4. **Smart Limiting**: Only processes the top 3 pharmacy results for speed
-5. **UK Postcode Validation**: Validates postcode format before processing
-6. **Error Recovery**: Gracefully handles timeouts and continues with partial results
+1. **Boots Priority**: Shows Boots pharmacies first, followed by other pharmacies
+2. **ODS Code Lookup**: Direct lookup of pharmacies by their ODS code
+3. **Detailed Output**: Clean display of services with numeric values
+4. **Chrome Optimizations**: Minimizes memory and CPU usage for headless Chrome
+5. **Timeout Protection**: Gracefully handles timeouts and prevents hanging
+6. **UK Postcode Validation**: Flexible validation accepting multiple formats
+7. **Error Recovery**: Continues with available data even when timeouts occur
 
 ## Troubleshooting
 
