@@ -629,8 +629,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pharmacy = await asyncio.to_thread(get_pharmacy_details, pharmacy_id)
 
                 if pharmacy:
-                    # Format the single pharmacy result
-                    response = "📊 Pharmacy Information 📊\n"
+                    # Format the single pharmacy result - check if it's Boots
+                    if "Boots" in pharmacy['name']:
+                        response = "📊 Boots Pharmacy Information 📊\n"
+                    else:
+                        response = "📊 Pharmacy Information 📊\n"
+
                     # No separator needed for single result
                     response += f"\n🏥 Pharmacy: {pharmacy['name']}\n"
 
@@ -738,9 +742,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
             
-        # Show how many pharmacies were found
-        pharmacies_count = len(pharmacy_ids)
-        await status_msg.edit_text(f"🏥 Found {pharmacies_count} pharmacies in {postcode}. Retrieving information...")
+        # Looking specifically for Boots
+        await status_msg.edit_text(f"🏥 Looking for Boots pharmacy in {postcode}...")
 
         # Get details for each pharmacy concurrently, filter for Boots only
         results = []
@@ -772,8 +775,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         # Store result only if we don't have Boots yet
                         if not boots_found:
                             results.append(pharmacy)
-                    # Update status message
-                    await status_msg.edit_text(f"Retrieved information for pharmacy {len(results)}/{len(tasks)}...")
+                    # Update status message without showing numbers
+                    await status_msg.edit_text(f"Searching for Boots pharmacy...")
         except asyncio.TimeoutError:
             logger.warning("Timeout getting pharmacy details")
             # Continue with any results we got
@@ -784,13 +787,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Error processing pharmacy details: {e}")
             # Continue with any results we got
 
-        # If we have multiple results but none are Boots, just keep the first one
-        if len(results) > 1 and not any("Boots" in p["name"] for p in results):
+        # Final filtering - ensure we only show a Boots pharmacy if available
+        boots_results = [p for p in results if "Boots" in p["name"]]
+        if boots_results:
+            # If we have any Boots pharmacies, only show those
+            results = boots_results[:1]  # Just the first Boots
+        elif len(results) > 0:
+            # If no Boots found, just keep first result
             results = [results[0]]
+
+        # Update header message based on whether we found Boots
+        if results and "Boots" in results[0]["name"]:
+            boots_found = True
+        else:
+            boots_found = False
 
         # Format and send results
         if results:
-            response = "📊 Pharmacy Information 📊\n"
+            # Use appropriate title based on whether we found Boots
+            if boots_found:
+                response = "📊 Boots Pharmacy Information 📊\n"
+            else:
+                response = "📊 Pharmacy Information 📊\n"
 
             for i, pharmacy in enumerate(results):
                 # Add separator line between pharmacies (except for the first one)
